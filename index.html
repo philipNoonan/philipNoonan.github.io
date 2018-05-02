@@ -37,7 +37,7 @@ h1 {
 /* Create four equal columns that floats next to each other */
 .column {
     float: left;
-    width: 33.33%;
+    width: 25%;
 }
 
 /* Clear floats after rows */ 
@@ -53,7 +53,19 @@ h1 {
     padding: 10px;
 }
 
+/* Responsive layout - makes a two column-layout instead of four columns */
+@media screen and (max-width: 900px) {
+    .column {
+        width: 50%;
+    }
+}
 
+/* Responsive layout - makes the two columns stack on top of each other instead of next to each other */
+@media screen and (max-width: 600px) {
+    .column {
+        width: 100%;
+    }
+}
 </style>
 </head>
 <body>
@@ -97,6 +109,9 @@ h1 {
       <p>Kinect v2 and Realsense R415/R435 enabled KinectFusion, using either depth to depth or depth to TSDF variants.</p>
     </div>
   </div>
+<!-- END GRID -->
+</div>
+<div class="row">
   <div class="column">
     <div class="content">
     <img src="/images/niftyPet.JPG" alt="reconstruction" style="width:100%">
@@ -104,8 +119,10 @@ h1 {
       <p>Cuda/Python 2.7 PET quantitative PET image reconstruction.</p>
     </div>
   </div>
-<!-- END GRID -->
 </div>
+
+
+
 
 <div class="content">
   <img src="/images/motion.jpg" alt="Bear" style="width:100%">
