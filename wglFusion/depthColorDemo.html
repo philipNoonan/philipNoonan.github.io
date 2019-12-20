@@ -1,0 +1,1162 @@
+<html>
+<head>
+</head>
+
+<style>
+  body {
+    display: flex;
+    flex-direction: column;
+    font-family: 'Roboto', 'Noto', sans-serif;
+    line-height: 1.5;
+    background-color: #fbfbfb;
+    margin: 20px;
+  }
+
+  .select {
+    margin: 16px 0px;
+    display: flex;
+    flex-direction: column;
+    max-width: 400px;
+  }
+
+  select {
+    background-color: transparent;
+    width: 100%;
+    padding: 4px 0;
+    font-size: 16px;
+    color: rgba(0,0,0, 0.26);
+    border: none;
+    border-bottom: 1px solid rgba(0,0,0, 0.12);
+  }
+
+  select:focus {
+    outline: none;
+  }
+
+  .select > label {
+    font-size: 10pt;
+    color: gray;
+  }
+
+  #console {
+    color: red;
+    font-size: 150%;
+  }
+
+  canvas {
+    border: 1px solid #cccccd;
+    background-color: white;
+  }
+
+  #tabcontainer {
+    margin: 16px 0px;
+  }
+
+  #tabcontainer input {
+    height: 35px;
+    visibility: hidden;
+  }
+
+  label[for=tab1], label[for=tab2] {
+    color: gray;
+    cursor: pointer;
+    display: block;
+    float: left;
+    height, : 40px;
+    line-height: 40px;
+    margin-right: 5px;
+    padding: 0 20px;
+    text-align: center;
+  }
+  
+  #tabcontainer input:hover + label {
+    background: lightgray;
+    color: gray;
+  }
+
+  #tabcontainer input:checked + label {
+    background: #f0f0f0;
+    color: dimgray;
+    position: relative;
+    z-index: 6;
+  }
+
+  #tabcontent1, #tabcontent2 {
+    background: #f0f0f0;
+    opacity: 0;
+    position: absolute;
+    z-index: -100;
+  }
+
+  #tabcontainer input#tab1:checked ~ #tabcontent #tabcontent1,
+  #tabcontainer input#tab2:checked ~ #tabcontent #tabcontent2 {
+      opacity: 1;
+      z-index: 100;
+  }
+
+  input.visible {
+    visibility: visible !important;
+  }
+
+
+  video-stream {
+    color: dimgray;
+  }
+
+  #synctab {
+    margin: 16px;
+    padding:0px;
+    color: dimgray;
+  }
+
+  label[for=synccanvas] {
+    display:block;    
+  }
+
+  #show-background-video {
+    position: absolute;
+    bottom: 50px;
+    right: 25px;
+    color: gray;
+    z-index: 5;
+    height: 20px;
+    text-align: right;
+  }
+  #show-background-color {
+    position: absolute;
+    bottom: 30px;
+    right: 25px;
+    color: gray;
+    z-index: 5;
+    height: 20px;
+    text-align: right;
+  }
+  #show-video-toggle, #show-color-toggle {
+    visibility: visible !important;
+    height: 15px !important;
+    vertical-align:middle;
+  }
+</style>
+
+<template id="video-stream">
+  <style>
+    :host {
+      display: flex;
+      flex-flow: row wrap;
+    }
+
+    canvas {
+      align-self: center;
+    }
+
+    div {
+      margin: 16px;
+    }
+
+    label {
+      display: block;
+    }
+  </style>
+  <div>
+    <label>WebGL2.0-Compute Powered ICP wglFusion:</label>
+    <canvas id="canvasGL" width="848" height="480"></canvas>
+  </div>
+</template>
+
+<body onload="onLoad()">
+  <h2>wglFusion Demo</h2>
+  <div id="console">
+    <!-- Print error messages here. -->
+  </div>
+  <div class="select">
+    <label for="selectVideoDevice">Capture device with depth stream</label>
+    <select id="selectVideoDevice"></select>
+  </div>
+  <div id="buttoncontainer">
+    <button onclick="resetVolume()">Reset Volume</button>
+  </div>
+  <div>
+    <button onclick="integrateClick()">Integrate Volume</button>
+    <input type="radio" id="integrateRadio" checked>
+  </div>
+  <div id="tabcontainer">
+    <input id="tab1" type="radio" name="tabs" value="basic" checked="checked" data-ontaboff="stopBasicTab" data-ontabon="startBasicTab"/>
+    <label for="tab1">Render depth</label>
+    <div id="tabcontent">
+      <div id = tabcontent1>
+        <video-stream></video-stream>
+      </div>
+    </div>
+  </div>
+</body>
+
+<script src="node_modules/gl-matrix/gl-matrix-min.js"></script>
+<script src="node_modules/luqr/luqr.min.js"></script>
+
+<script src="depth-camera.js"></script>
+<script src="src/depthToVert.js"></script>
+<script src="src/vertToNorm.js"></script>
+<script src="src/raycastVolume.js"></script>
+<script src="src/integrateVolume.js"></script>
+<script src="src/trackP2P.js"></script>
+<script src="src/reduceP2P.js"></script>
+<script src="src/render.js"></script>
+<script src="src/getClickedPoint.js"></script>
+
+
+
+<script>
+  let readAndShowDepthPixels = false;
+  let error = window.console.error;
+  window.console.error = (message, ...rest) => {
+    let target = document.querySelector('#console');
+    error.call(window.console, message, ...rest);
+
+    if (message instanceof Error) {
+      message = `${message.name}: ${message.message}`;
+    }
+
+    target.innerHTML += `${message}<br>`;
+  }
+
+
+  function resetVolume() {
+    integrateFlag = 0;
+    resetFlag = 1;
+    pose = [...initPose];
+  }
+
+  function integrateClick() {
+    integrateFlag = 1 - integrateFlag;
+    var intFlag = document.getElementById("integrateRadio");
+
+    if (integrateFlag == 1) {
+      intFlag.checked = true;
+    }
+    else {
+      intFlag.checked = false;
+    }
+  }
+
+
+  let tabs = document.getElementsByName("tabs");
+  let videos = {depth: null, color: null};
+
+  let selectedtab = tabs[0];
+  for(let i = 0; i < tabs.length; i++) {
+    tabs[i].onclick = function() {
+      if(this !== selectedtab) {
+        window[selectedtab.dataset.ontaboff](); 
+        selectedtab = this;
+        window[selectedtab.dataset.ontabon](); 
+      }
+    };
+  }
+  
+  function stopVideo(video) {
+    if (video && video.srcObject) {
+      const cs = video.srcObject;
+      for (let track of cs.getTracks()) {
+        track.stop();
+      }
+      video.srcObject = null;
+    }
+  }
+
+  function startBasicTab() {
+    const videoStreamEl = document.querySelector('video-stream');
+    videoStreamEl.play();    
+  }
+
+  function stopBasicTab() {
+    const videoStreamEl = document.querySelector('video-stream');
+    videoStreamEl.pause();
+  }
+
+  const videoToggle = document.getElementById("show-video-toggle");
+  
+  function getCursorPosition(canvas, event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    //console.log("x: " + x + " y: " + y);
+    mouseClickPos[0] = x;
+    mouseClickPos[1] = y;
+
+}
+
+  // programs
+  var depthToVertProg;
+  var vertToNormProg;
+  var integrateProg;
+  var raycastProg;
+  var p2pTrackProg;
+  var p2pReduceProg;
+
+  var clickedPointProg;
+  var renderProgram;
+
+  var resetFlag = 0;
+  var integrateFlag = 1;
+
+
+
+  var camPam = [420, 240, 420, 420]; // cx cy fx fy
+
+  var K = glMatrix.mat4.create();
+      K[0] = camPam[2];
+      K[5] = camPam[3];
+      K[8] = camPam[0];
+      K[9] = camPam[1];
+
+  var invK = glMatrix.mat4.create();
+  glMatrix.mat4.invert(invK, K);
+  //  	invK[0] = 1.0 / camPam[2];
+  //    invK[5] = 1.0 / camPam[3];
+  //    invK[8] = -camPam[0] / camPam[2];
+  //    invK[9] = -camPam[1] / camPam[3];
+
+  var volDim = [0.5, 0.5, 0.5];    
+  var volSize = [256.0, 256.0, 256.0];
+
+  var imageSize = [848, 480];
+
+  var pose = glMatrix.mat4.create();
+  var initPose = glMatrix.mat4.create();
+  var invIP = glMatrix.mat4.create();
+
+  glMatrix.mat4.translate(pose, pose, [volDim[0] / 2.0, volDim[1] / 2.0, 0.0]);
+  initPose = [...pose];
+  glMatrix.mat4.invert(invIP, initPose);
+
+  var mouseClickPos = [imageSize[0] / 2, imageSize[1] / 2];
+  
+
+  
+
+  customElements.define('video-stream', class extends HTMLElement {
+    constructor() {
+      super();
+      const template = document.querySelector('#video-stream');
+      const clone = document.importNode(template.content, true);
+      const shadowRoot = this.attachShadow({ mode: 'open' });
+      this.shadowRoot.appendChild(clone);
+
+      this._frameLoop = this._frameLoop.bind(this);
+
+      this.readBuffer = null;
+      this.readFormat = null;
+    }
+
+
+    connectedCallback() {
+      this.gl = this._configureGLContext();
+
+      this.frameAvailable = false;
+
+      this.video = this._createOffscreenVideo();
+      this.video.oncanplay = _ => { this.frameAvailable = true; }
+      this.video.addEventListener("play", this._frameLoop);
+
+      let hasTouchListeners = false;
+      const onVideoTouchStart = _ => {
+        hasTouchListeners = false;
+        window.removeEventListener("touchstart", onVideoTouchStart, true);
+        this.video.play();
+      }
+
+      if (this.video && this.video.paused && !hasTouchListeners) {
+        hasTouchListeners = true;
+        window.addEventListener("touchstart", onVideoTouchStart, true);
+      }
+    }
+
+    _createOffscreenVideo() {
+      return Object.assign(document.createElement("video"), {
+        autoplay: true,
+        loop: true,
+        crossOrigin: "anonymous",
+        width: imageSize[0],
+        height: imageSize[1]
+      });
+    }
+    
+    _getClickedPoint() {
+      const gl = this.gl;
+
+      gl.useProgram(clickedPointProg);
+
+      gl.uniform2fv(gl.getUniformLocation(clickedPointProg, "clickedPoint"), mouseClickPos);
+      gl.bindImageTexture(0, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboClickedPoint);
+
+      gl.dispatchCompute(1, 1, 1);
+      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+      const clickedVert = new Float32Array(4);
+
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboClickedPoint);
+      gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, clickedVert);
+
+      initPose = glMatrix.mat4.create();
+      glMatrix.mat4.translate(initPose, initPose, [-clickedVert[0] + volDim[0] / 2.0, -clickedVert[1] + volDim[1] / 2.0, -clickedVert[2] + volDim[2] / 2.0]);
+      pose = [...initPose];
+
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    _resultToMatrix(_result, _delta)
+    {
+      // from https://github.com/g-truc/glm/tree/master/glm/gtx/euler_angles.inl
+      let c1 = Math.cos(-_result[3]);
+      let c2 = Math.cos(-_result[4]);
+      let c3 = Math.cos(-_result[5]);
+      let s1 = Math.sin(-_result[3]);
+      let s2 = Math.sin(-_result[4]);
+      let s3 = Math.sin(-_result[5]);
+      
+      _delta[0] = c2 * c3;
+      _delta[1] =-c1 * s3 + s1 * s2 * c3;
+      _delta[2] = s1 * s3 + c1 * s2 * c3;
+      _delta[3] = 0;
+      _delta[4] = c2 * s3;
+      _delta[5] = c1 * c3 + s1 * s2 * s3;
+      _delta[6] =-s1 * c3 + c1 * s2 * s3;
+      _delta[7] = 0;
+      _delta[8] =-s2;
+      _delta[9] = s1 * c2;
+      _delta[10] = c1 * c2;
+      _delta[11] = 0;
+      _delta[12] = _result[0];
+      _delta[13] = _result[1];
+      _delta[14] = _result[2];
+      _delta[15] = 1;
+    }
+
+
+    _solve(_A, _b, _result) {
+
+      let A = Array.from(_A);
+      let b = Array.from(_b);
+      var folded_A = luqr.fold(A, 6);
+      var res = Array(6);
+      res = luqr.solve(folded_A,b);
+      if (res != null)
+      {
+        for (let i = 0; i < res.length; i++)
+        {
+          _result[i] = res[i];
+        }
+      }
+
+
+    }
+
+    _getReduction(_A, _b, _icpData) {
+      const gl = this.gl;
+
+      const outputReductionData = new Float32Array(8 * 32);
+
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboReductionOutput);
+      gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, outputReductionData);
+
+      for (let row = 1; row < 8; row++)
+		  {
+			  for (let col = 0; col < 32; col++)
+			  {
+				  outputReductionData[col + 0 * 32] += outputReductionData[col + row * 32];
+			  }
+		  }
+
+      /*
+      vector b
+      | 1 |
+      | 2 |
+      | 3 |
+      | 4 |
+      | 5 |
+      | 6 |
+      and
+      matrix a
+      | 7  | 8  | 9  | 10 | 11 | 12 |
+      | 8  | 13 | 14 | 15 | 16 | 17 |
+      | 9  | 14 | 18 | 19 | 20 | 21 |
+      | 10 | 15 | 19 | 22 | 23 | 24 |
+      | 11 | 16 | 20 | 23 | 25 | 26 |
+      | 12 | 17 | 21 | 24 | 26 | 27 |
+      AE = sqrt( [0] / [28] )
+      count = [28]
+      */
+
+      for (let i = 1; i <= 6; i++)
+      {
+        _b[i - 1] = outputReductionData[i];
+      }
+
+      var shift = 7;
+      for (let i = 0; i < 6; ++i)
+      {
+        for (let j = i; j < 6; ++j)
+        {
+          let value = outputReductionData[shift++];
+
+          _A[j * 6 + i] = _A[i * 6 + j] = value;
+        }
+      }
+
+      _icpData.AE = Math.sqrt(outputReductionData[0] / outputReductionData[28]);
+      _icpData.icpCount = outputReductionData[28];
+    }
+
+
+    _reduce() {
+      const gl = this.gl;
+
+      gl.useProgram(p2pReduceProg);
+
+      gl.uniform2fv(gl.getUniformLocation(p2pReduceProg, "imSize"), imageSize);
+
+      // buffers
+      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboReduction);
+      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, gl.ssboReductionOutput);
+
+
+      gl.dispatchCompute(8, 1, 1);
+      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    }
+
+    _track(_T, _level) {
+      const gl = this.gl;
+
+      gl.useProgram(p2pTrackProg);
+
+      // buffers
+      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboReduction);
+      // uniforms 
+      gl.uniformMatrix4fv(gl.getUniformLocation(p2pTrackProg, "T"), false, _T);
+
+      gl.uniform1f(gl.getUniformLocation(p2pTrackProg, "distThresh"), 0.01);
+      gl.uniform1f(gl.getUniformLocation(p2pTrackProg, "normThresh"), 0.9);
+      gl.uniform1i(gl.getUniformLocation(p2pTrackProg, "mip"), _level);
+      gl.uniform4fv(gl.getUniformLocation(p2pTrackProg, "cam"), camPam);
+
+      // textures
+      gl.bindImageTexture(0, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+      gl.bindImageTexture(1, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+      gl.bindImageTexture(2, gl.refVertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+      gl.bindImageTexture(3, gl.refNormal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+      gl.bindImageTexture(4, gl.render_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA8UI);
+
+      gl.dispatchCompute(this.video.width / 32, this.video.height / 32, 1);
+      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+    }
+
+    
+    _integrateVolume(_iFlag, _rFlag) {
+      const gl = this.gl;
+
+      gl.useProgram(integrateProg);
+
+      var invPose = glMatrix.mat4.create();
+      glMatrix.mat4.invert(invPose, pose);
+
+      gl.uniform4fv(gl.getUniformLocation(integrateProg, "cam"), camPam);
+      gl.uniformMatrix4fv(gl.getUniformLocation(integrateProg, "invT"), false, invPose);
+
+      gl.uniform1i(gl.getUniformLocation(integrateProg, "integrateFlag"), _iFlag);
+      gl.uniform1i(gl.getUniformLocation(integrateProg, "resetFlag"), _rFlag);
+
+      gl.uniform1i(gl.getUniformLocation(integrateProg, "p2p"), 1);
+      gl.uniform1i(gl.getUniformLocation(integrateProg, "p2v"), 0);
+
+      gl.uniform1f(gl.getUniformLocation(integrateProg, "maxWeight"), 100.0);
+      gl.uniform1f(gl.getUniformLocation(integrateProg, "volDim"), volDim[0]);
+      gl.uniform1f(gl.getUniformLocation(integrateProg, "volSize"), volSize[0]);
+
+
+      // textures
+      gl.bindImageTexture(0, gl.volume_texture, 0, false, 0, gl.READ_WRITE, gl.R32F);
+      gl.bindImageTexture(1, gl.volumeWeight_texture, 0, false, 0, gl.READ_WRITE, gl.R32F);
+
+      gl.bindImageTexture(2, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+      gl.bindImageTexture(3, gl.render_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
+      gl.bindImageTexture(4, gl.normal_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
+
+      gl.dispatchCompute(volSize[0] / 32, volSize[1] / 32, 1);
+      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+      if (resetFlag == 1)
+      {
+        resetFlag = 0;
+        integrateFlag = 1;
+      }
+
+    }
+
+    _raycastVolume() {
+      const gl = this.gl;
+      gl.useProgram(raycastProg);
+
+      gl.bindImageTexture(0, gl.volume_texture, 0, false, 0, gl.READ_ONLY, gl.R32F);
+      gl.bindImageTexture(1, gl.refVertex_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
+      gl.bindImageTexture(2, gl.refNormal_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
+      
+      var view = glMatrix.mat4.create();
+      glMatrix.mat4.mul(view, pose, invK);
+
+      let dMin = -volDim[0] / 20.0;
+      let dMax = volDim[0] / 10.0;
+
+      let step = volDim[0] / volSize[0];
+
+      gl.uniformMatrix4fv(gl.getUniformLocation(raycastProg, "view"), false, view);
+      gl.uniform1f(gl.getUniformLocation(raycastProg, "step"), step);
+      gl.uniform1f(gl.getUniformLocation(raycastProg, "largeStep"), 0.5 * 0.75);
+      gl.uniform1f(gl.getUniformLocation(raycastProg, "nearPlane"), 0.01);
+      gl.uniform1f(gl.getUniformLocation(raycastProg, "farPlane"), 3.0);
+      gl.uniform1f(gl.getUniformLocation(raycastProg, "volDim"), volDim[0]);
+      gl.uniform1f(gl.getUniformLocation(raycastProg, "volSize"), volSize[0]);
+
+      gl.dispatchCompute(this.video.width / 32, this.video.height / 32, 1);
+      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+    }
+
+    
+    _generateVertNorms() {
+      const gl = this.gl;
+
+      gl.useProgram(depthToVertProg);
+      gl.bindImageTexture(0, gl.depth_texture, 0, false, 0, gl.READ_ONLY, gl.R32F)
+      gl.bindImageTexture(1, gl.vertex_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F)
+
+      // bind uniforms
+      gl.uniformMatrix4fv(gl.getUniformLocation(depthToVertProg, "invK"), false, invK);
+      gl.uniform1f(gl.getUniformLocation(depthToVertProg, "minDepth"), 0.1);
+      gl.uniform1f(gl.getUniformLocation(depthToVertProg, "maxDepth"), 3.0);
+      gl.uniform2fv(gl.getUniformLocation(depthToVertProg, "bottomLeft"), [0, 0]);
+      gl.uniform2fv(gl.getUniformLocation(depthToVertProg, "topRight"), imageSize);
+
+      gl.dispatchCompute(this.video.width / 32, this.video.height / 32, 1);
+      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+
+      gl.useProgram(vertToNormProg);
+      gl.bindImageTexture(0, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
+      gl.bindImageTexture(1, gl.normal_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F)
+
+      gl.dispatchCompute(this.video.width / 32, this.video.height / 32, 1);
+      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+    }
+
+    _calcPose() {
+      const gl = this.gl;
+
+      if (resetFlag == 0) {
+        this._generateVertNorms();
+        this._raycastVolume();
+        
+        var T = glMatrix.mat4.create();
+
+        T = [...pose];
+        var level = 0;
+
+        var A = new Float32Array(36); // 6 * 6
+        var b = new Float32Array(6);
+        var result = new Float32Array(6);
+        var icpData = {AE:0.0, icpCount:0};
+
+        for (let i = 0; i < 2; i++)
+        {
+          var delta = glMatrix.mat4.create();
+
+          this._track(T, level);
+          this._reduce();
+          this._getReduction(A, b, icpData);
+          this._solve(A, b, result);
+          this._resultToMatrix(result, delta);
+
+          glMatrix.mat4.mul(T, delta, T);
+        }
+
+        pose = [...T];
+      }
+      else {
+        this._getClickedPoint();
+      }
+      
+
+      this._integrateVolume(integrateFlag, resetFlag);
+
+
+    }
+
+
+    _frameLoop() {
+      const gl = this.gl;
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
+
+      if (this.frameAvailable) {
+        // Upload the video frame to texture.
+		    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, this.video);
+
+
+      }
+
+
+
+
+      this._calcPose();
+
+
+
+		  gl.useProgram(renderProgram);
+
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, gl.refNormal_texture);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
+      gl.vertexAttribPointer(gl.vertex_location, 2, gl.FLOAT, false, 0, 0);
+
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.index_buffer);
+      gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+      if (!this.paused)
+        window.requestAnimationFrame(this._frameLoop);
+    }
+
+    pause() {
+      this.paused = true;
+    }
+
+    play() {
+      this.paused = false;
+      window.requestAnimationFrame(this._frameLoop);
+    }
+
+
+
+
+
+    // Creates WebGL/WebGL2 context used to upload depth video to texture,
+    // read the pixels to Float buffer and optionElally render the texture.
+    _configureGLContext() {
+      const canvas = this.shadowRoot.getElementById("canvasGL");
+      const gl = canvas.getContext('webgl2-compute', {antialias: false});
+      if (gl) {
+        // The extension tells us if we can use single component R32F texture format.
+        gl.color_buffer_float_ext = gl.getExtension('EXT_color_buffer_float');
+      } else {
+        gl = canvas.getContext("webgl");
+        gl.getExtension("OES_texture_float");
+      }
+      // from https://stackoverflow.com/questions/55677/how-do-i-get-the-coordinates-of-a-mouse-click-on-a-canvas-element/18053642#18053642
+      canvas.addEventListener('mousedown', function(e) {
+        getCursorPosition(canvas, e)
+      })
+
+
+  // CREATE SHADERS
+  const depthToVertShader = gl.createShader(gl.COMPUTE_SHADER);
+  gl.shaderSource(depthToVertShader, depthToVertSource);
+  gl.compileShader(depthToVertShader);
+  if (!gl.getShaderParameter(depthToVertShader, gl.COMPILE_STATUS)) {
+    console.log(gl.getShaderInfoLog(depthToVertShader));
+    return;
+  }
+  
+  depthToVertProg = gl.createProgram();
+  gl.attachShader(depthToVertProg, depthToVertShader);
+  gl.linkProgram(depthToVertProg);
+  if (!gl.getProgramParameter(depthToVertProg, gl.LINK_STATUS)) {
+    console.log(gl.getProgramInfoLog(depthToVertProg));
+    return;
+  }
+
+  const vertToNormShader = gl.createShader(gl.COMPUTE_SHADER);
+  gl.shaderSource(vertToNormShader, vertToNormSource);
+  gl.compileShader(vertToNormShader);
+  if (!gl.getShaderParameter(vertToNormShader, gl.COMPILE_STATUS)) {
+    console.log(gl.getShaderInfoLog(vertToNormShader));
+    return;
+  }
+  
+  vertToNormProg = gl.createProgram();
+  gl.attachShader(vertToNormProg, vertToNormShader);
+  gl.linkProgram(vertToNormProg);
+  if (!gl.getProgramParameter(vertToNormProg, gl.LINK_STATUS)) {
+    console.log(gl.getProgramInfoLog(vertToNormProg));
+    return;
+  }
+
+  const integrateShader = gl.createShader(gl.COMPUTE_SHADER);
+  gl.shaderSource(integrateShader, integrateSource);
+  gl.compileShader(integrateShader);
+  if (!gl.getShaderParameter(integrateShader, gl.COMPILE_STATUS)) {
+    console.log(gl.getShaderInfoLog(integrateShader));
+    return;
+  }
+  
+  integrateProg = gl.createProgram();
+  gl.attachShader(integrateProg, integrateShader);
+  gl.linkProgram(integrateProg);
+  if (!gl.getProgramParameter(integrateProg, gl.LINK_STATUS)) {
+    console.log(gl.getProgramInfoLog(integrateProg));
+    return;
+  }
+
+  const raycastShader = gl.createShader(gl.COMPUTE_SHADER);
+  gl.shaderSource(raycastShader, raycastSource);
+  gl.compileShader(raycastShader);
+  if (!gl.getShaderParameter(raycastShader, gl.COMPILE_STATUS)) {
+    console.log(gl.getShaderInfoLog(raycastShader));
+    return;
+  }
+  
+  raycastProg = gl.createProgram();
+  gl.attachShader(raycastProg, raycastShader);
+  gl.linkProgram(raycastProg);
+  if (!gl.getProgramParameter(raycastProg, gl.LINK_STATUS)) {
+    console.log(gl.getProgramInfoLog(raycastProg));
+    return;
+  }
+
+  const p2pTrackShader = gl.createShader(gl.COMPUTE_SHADER);
+  gl.shaderSource(p2pTrackShader, p2pTrackSource);
+  gl.compileShader(p2pTrackShader);
+  if (!gl.getShaderParameter(p2pTrackShader, gl.COMPILE_STATUS)) {
+    console.log(gl.getShaderInfoLog(p2pTrackShader));
+    return;
+  }
+  
+  p2pTrackProg = gl.createProgram();
+  gl.attachShader(p2pTrackProg, p2pTrackShader);
+  gl.linkProgram(p2pTrackProg);
+  if (!gl.getProgramParameter(p2pTrackProg, gl.LINK_STATUS)) {
+    console.log(gl.getProgramInfoLog(p2pTrackProg));
+    return;
+  }
+
+  const p2pReduceShader = gl.createShader(gl.COMPUTE_SHADER);
+  gl.shaderSource(p2pReduceShader, p2pReduceSource);
+  gl.compileShader(p2pReduceShader);
+  if (!gl.getShaderParameter(p2pReduceShader, gl.COMPILE_STATUS)) {
+    console.log(gl.getShaderInfoLog(p2pReduceShader));
+    return;
+  }
+  
+  p2pReduceProg = gl.createProgram();
+  gl.attachShader(p2pReduceProg, p2pReduceShader);
+  gl.linkProgram(p2pReduceProg);
+  if (!gl.getProgramParameter(p2pReduceProg, gl.LINK_STATUS)) {
+    console.log(gl.getProgramInfoLog(p2pReduceProg));
+    return;
+  }
+
+  const clickedPointShader = gl.createShader(gl.COMPUTE_SHADER);
+  gl.shaderSource(clickedPointShader, clickedPointSource);
+  gl.compileShader(clickedPointShader);
+  if (!gl.getShaderParameter(clickedPointShader, gl.COMPILE_STATUS)) {
+    console.log(gl.getShaderInfoLog(clickedPointShader));
+    return;
+  }
+  
+  clickedPointProg = gl.createProgram();
+  gl.attachShader(clickedPointProg, clickedPointShader);
+  gl.linkProgram(clickedPointProg);
+  if (!gl.getProgramParameter(clickedPointProg, gl.LINK_STATUS)) {
+    console.log(gl.getProgramInfoLog(clickedPointProg));
+    return;
+  }
+
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  
+  
+      // Shaders and program are needed only if rendering depth texture.
+      var vertex_shader = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vertex_shader, vertexShaderSource);
+      gl.compileShader(vertex_shader);
+
+	if (!gl.getShaderParameter(vertex_shader, gl.COMPILE_STATUS)) {
+		console.log(gl.getShaderInfoLog(vertex_shader));
+		return;
+	}
+  
+      var pixel_shader = gl.createShader(gl.FRAGMENT_SHADER);
+	  
+	  
+	  
+	  
+      gl.shaderSource(pixel_shader, fragmentShaderSource);
+      gl.compileShader(pixel_shader);
+	  
+	    if (!gl.getShaderParameter(pixel_shader, gl.COMPILE_STATUS)) {
+		console.log(gl.getShaderInfoLog(pixel_shader));
+		return;
+		}
+  
+
+  
+  
+  
+
+      renderProgram  = gl.createProgram();
+      gl.attachShader(renderProgram, vertex_shader);
+      gl.attachShader(renderProgram, pixel_shader);
+      gl.linkProgram(renderProgram);
+      gl.useProgram(renderProgram);
+
+      var vertex_location = gl.getAttribLocation(renderProgram, "v");
+      gl.enableVertexAttribArray(vertex_location);
+      gl.uniform1i(gl.getUniformLocation(renderProgram, "s"), 0);
+
+      var vertex_buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0,1,0,1,1,0,1]), gl.STATIC_DRAW);
+
+      var index_buffer= gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, index_buffer);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0,1,2,0,2,3]), gl.STATIC_DRAW);
+
+
+      let arr = new Float32Array(imageSize[0] * imageSize[1] * 8);// width * height * sizeof reduType struct
+      var ssboReduction = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboReduction);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, arr, gl.DYNAMIC_COPY);
+
+      let arrOutput = new Float32Array(32 * 8);
+      var ssboReductionOutput = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboReductionOutput);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, arrOutput, gl.DYNAMIC_COPY);
+
+      let arrClicked = new Float32Array(4);
+      var ssboClickedPoint = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboClickedPoint);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, arrClicked, gl.DYNAMIC_COPY);
+
+      var depth_texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, depth_texture);
+	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R32F, imageSize[0], imageSize[1]);
+
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+      var volume_texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_3D, volume_texture);
+	    gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32F, volSize[0], volSize[1], volSize[2]);
+
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+      var volumeWeight_texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_3D, volumeWeight_texture);
+	    gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32F, volSize[0], volSize[1], volSize[2]);
+
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+
+
+      var render_texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, render_texture);
+	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8UI, imageSize[0], imageSize[1]);
+
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+      // Framebuffer for reading back the texture.
+      var framebuffer = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, render_texture, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      var vertex_texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, vertex_texture);
+	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, imageSize[0], imageSize[1]);
+
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+      var normal_texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, normal_texture);
+	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, imageSize[0], imageSize[1]);
+
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+      var refVertex_texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, refVertex_texture);
+	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, imageSize[0], imageSize[1]);
+
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+      var refNormal_texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, refNormal_texture);
+	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, imageSize[0], imageSize[1]);
+
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+      gl.vertex_buffer = vertex_buffer;
+      gl.vertex_location = vertex_location;
+      gl.index_buffer = index_buffer;
+
+      gl.ssboReduction = ssboReduction;
+      gl.ssboReductionOutput = ssboReductionOutput;
+      gl.ssboClickedPoint = ssboClickedPoint;
+
+      gl.depth_texture = depth_texture;
+      gl.vertex_texture = vertex_texture;
+      gl.normal_texture = normal_texture;
+      gl.volume_texture = volume_texture;      
+      gl.volumeWeight_texture = volumeWeight_texture;
+      gl.refVertex_texture = refVertex_texture;
+      gl.refNormal_texture = refNormal_texture;
+      gl.render_texture = render_texture;
+
+
+      gl.framebuffer = framebuffer;
+
+      return gl;
+    }
+
+    async loadStream(deviceId) {
+      stopVideo(videos.depth);
+      stopVideo(videos.color);
+
+      // If the item in drop-down list is selected, use it.
+      const getUserMedia = () => {
+        // add ?allow=all to URL to allow listing all devices (incl. those not supporting depth).
+        if (!deviceId && (new URL(window.location)).searchParams.get("allow") !== "all") {
+          return DepthCamera.getDepthStream();
+        }
+
+        const constraints = {
+          video: {
+            deviceId: deviceId ? { exact: deviceId } : {}
+          }
+        }
+
+        return navigator.mediaDevices.getUserMedia(constraints);
+      }
+
+      try {
+        const stream = await getUserMedia();
+        this.video.srcObject = stream;
+        videos.depth = this.video;
+
+        // Chrome, starting with version 59, implements getSettings() API.
+        const track = stream.getVideoTracks()[0];
+        if (track.getSettings) {
+          this.depthDeviceId = track.getSettings().deviceId;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  });
+
+  function populateSelectElement(devices) {
+    const selectEl = document.querySelector('#selectVideoDevice');
+    const videoStreamEl = document.querySelector('video-stream');
+
+    let selected = selectEl.value;
+
+    while (selectEl.firstChild) {
+      selectEl.removeChild(selectEl.firstChild);
+    }
+
+    let selectedDeviceStillExists = false;
+    for (let i = 0; i < devices.length; ++i) {
+      const info = devices[i];
+      if (info.kind !== 'videoinput') {
+        continue;
+      }
+
+      const optionEl = document.createElement('option');
+      optionEl.value = info.deviceId;
+      optionEl.text = info.label || 'camera ' + (selectEl.length + 1);
+      selectEl.appendChild(optionEl);
+
+      if (optionEl.value === selected) {
+        selectedDeviceStillExists = true;
+      }
+    }
+
+    if (selectedDeviceStillExists) {
+      selectEl.value = selected;
+    } else if (!selected) {
+      // If no other device is selected, set the initial selection to depth device.
+      if (videoStreamEl.depthDeviceId) {
+        selectEl.value = videoStreamEl.depthDeviceId;
+      }
+    }
+
+
+  }
+
+  function onLoad() {
+    const videoStreamEl = document.querySelector('video-stream');
+    const selectEl = document.querySelector('#selectVideoDevice');
+
+    selectEl.onchange = async event => {
+      selectEl.disabled = true;
+      const deviceId = event.target.value;
+
+      await videoStreamEl.loadStream(deviceId);
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      populateSelectElement(devices);
+      if (selectedtab.value != "basic") {
+        // It is on by default; stop rendering it if not visible.
+        stopBasicTab();
+      }
+      window[selectedtab.dataset.ontabon]();
+
+      selectEl.disabled = false;
+    };
+    selectEl.dispatchEvent(new Event('change', { 'bubbles': true }))
+  }
+</script>
+</html>
