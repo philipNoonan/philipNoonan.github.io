@@ -179,6 +179,26 @@
     <button onclick="integrateClick()">Integrate Volume</button>
     <input type="radio" id="integrateRadio" checked>
   </div>
+  <div>
+    <button onclick="renderDepthClick()">Render Depth</button>
+    <input type="radio" id="renderDepthRadio" checked>
+  </div>
+  <div>
+    <button onclick="renderRefNormClick()">Render refNorm</button>
+    <input type="radio" id="renderRefNormRadio">
+  </div>
+  <div>
+    <button onclick="renderRefVertClick()">Render refVert</button>
+    <input type="radio" id="renderRefVertRadio">
+  </div>
+  <div>
+    <button onclick="renderNormClick()">Render Norm</button>
+    <input type="radio" id="renderNormRadio">
+  </div>
+  <div>
+    <button onclick="renderVertClick()">Render Vert</button>
+    <input type="radio" id="renderVertRadio">
+  </div>
   <div id="tabcontainer">
     <input id="tab1" type="radio" name="tabs" value="basic" checked="checked" data-ontaboff="stopBasicTab" data-ontabon="startBasicTab"/>
     <label for="tab1">Render depth</label>
@@ -238,6 +258,31 @@
     }
   }
 
+  function renderDepthClick() {
+    renderDepthFlag = 1 - renderDepthFlag;
+    let flag = document.getElementById("renderDepthRadio");
+    flag.checked = renderDepthFlag == 1 ? true : false;
+  }
+  function renderRefNormClick() {
+    renderRefNormFlag = 1 - renderRefNormFlag;
+    let flag = document.getElementById("renderRefNormRadio");
+    flag.checked = renderRefNormFlag == 1 ? true : false;
+  }
+  function renderRefVertClick() {
+    renderRefVertFlag = 1 - renderRefVertFlag;
+    let flag = document.getElementById("renderRefVertRadio");
+    flag.checked = renderRefVertFlag == 1 ? true : false;
+  }
+  function renderVertClick() {
+    renderVertFlag = 1 - renderVertFlag;
+    let flag = document.getElementById("renderVertRadio");
+    flag.checked = renderVertFlag == 1 ? true : false;
+  }
+  function renderNormClick() {
+    renderNormFlag = 1 - renderNormFlag;
+    let flag = document.getElementById("renderNormRadio");
+    flag.checked = renderNormFlag == 1 ? true : false;
+  }
 
   let tabs = document.getElementsByName("tabs");
   let videos = {depth: null, color: null};
@@ -299,6 +344,12 @@
   var resetFlag = 0;
   var integrateFlag = 1;
 
+  var renderDepthFlag = 1;
+  var renderRefNormFlag = 0;
+  var renderRefVertFlag = 0;
+  var renderNormFlag = 0;
+  var renderVertFlag = 0;
+
 
 
   var camPam = [420, 240, 420, 420]; // cx cy fx fy
@@ -325,7 +376,7 @@
   var initPose = glMatrix.mat4.create();
   var invIP = glMatrix.mat4.create();
 
-  glMatrix.mat4.translate(pose, pose, [volDim[0] / 2.0, volDim[1] / 2.0, 0.0]);
+  //glMatrix.mat4.translate(pose, pose, [volDim[0] / 2.0, volDim[1] / 2.0, 0.0]);
   initPose = [...pose];
   glMatrix.mat4.invert(invIP, initPose);
 
@@ -728,11 +779,25 @@
 
 		  gl.useProgram(renderProgram);
 
+      let renderOpts = renderDepthFlag << 0 | 
+                       renderRefNormFlag << 1 |
+                       renderRefVertFlag << 2 |
+                       renderNormFlag << 3 |
+                       renderVertFlag << 4;
+
+      gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
+
 
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, gl.refNormal_texture);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, gl.refVertex_texture);
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, gl.normal_texture);
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_2D, gl.vertex_texture);
 
       gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
       gl.vertexAttribPointer(gl.vertex_location, 2, gl.FLOAT, false, 0, 0);
