@@ -9,11 +9,15 @@ const vertexShaderSource = `#version 310 es
    
 const fragmentShaderSource = `#version 310 es
     precision mediump float;
+
     layout (binding = 0) uniform highp sampler2D depth;
-    layout (binding = 1) uniform highp sampler2D refNorms;
-    layout (binding = 2) uniform highp sampler2D refVerts;
-    layout (binding = 3) uniform highp sampler2D norms;
-    layout (binding = 4) uniform highp sampler2D verts;
+
+    //layout(binding = 0, r32f) readonly uniform mediump image2D depthMap;
+    layout(binding = 1, rgba32f) readonly uniform mediump image2D refNormalMap;
+    layout(binding = 2, rgba32f) readonly uniform mediump image2D refVertexMap;
+    layout(binding = 3, rgba32f) readonly uniform mediump image2D normalMap;
+    layout(binding = 4, rgba32f) readonly uniform mediump image2D vertexMap;
+
 
     uniform int renderOptions;
     in vec2 t;
@@ -35,7 +39,7 @@ const fragmentShaderSource = `#version 310 es
 
     if (renderRefNorm == 1)
     {
-        vec4 refNormsData = vec4(texture(refNorms, t));
+        vec4 refNormsData = vec4(imageLoad(refNormalMap, ivec2(t.x * 848.0f, t.y * 480.0f)));
         if (abs(refNormsData.x) > 0.0f)
         {
             outColor = vec4(abs(refNormsData.xyz), 1.0f);
@@ -44,14 +48,14 @@ const fragmentShaderSource = `#version 310 es
 
     if (renderRefVert == 1)
     {
-        vec4 refVertsData = vec4(texture(refVerts, t));
+        vec4 refVertsData = vec4(imageLoad(refVertexMap, ivec2(t.x * 848.0f, t.y * 480.0f)));
         outColor = vec4(refVertsData.xyz, 1.0f);
 
     }
 
     if (renderNorm == 1)
     {
-        vec4 normsData = vec4(texture(norms, t));
+        vec4 normsData = vec4(imageLoad(normalMap, ivec2(t.x * 848.0f, t.y * 480.0f)));
         if (abs(normsData.x) > 0.0f)
         {
             outColor = vec4(abs(normsData.xyz), 1.0f);
@@ -60,10 +64,11 @@ const fragmentShaderSource = `#version 310 es
 
     if (renderVert == 1)
     {
-        vec4 vertsData = vec4(texture(verts, t));
+        vec4 vertsData = vec4(imageLoad(vertexMap, ivec2(t.x * 848.0f, t.y * 480.0f)));
         outColor = vec4(vertsData.xyz, 1.0f);
 
     }
+
 
 
   }
