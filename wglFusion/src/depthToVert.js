@@ -13,7 +13,7 @@
   void main() {
     ivec2 u = ivec2(gl_GlobalInvocationID.xy);
 
-    float z = imageLoad(depthImage, u).x * (6.55350f); // this has been manually set and depends on the depth scale set by the realsense sdk, its the short->float scaled by depth scale, seems to work
+    float z = imageLoad(depthImage, u).x * (65.5350f); // this has been manually set and depends on the depth scale set by the realsense sdk, its the short->float scaled by depth scale, seems to work. 65.xxx is the default setting on the sensor 1000 units
 
     if (z >= minDepth && z <= maxDepth
         && u.x > int(bottomLeft.x) && u.y > int(bottomLeft.y)

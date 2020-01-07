@@ -9,6 +9,7 @@
   layout(binding = 4, rgba8ui) writeonly uniform highp uimage2D trackImage;
 
   uniform mat4 T;
+  uniform mat4 view;
   uniform float distThresh;
   uniform float normThresh;
   uniform int mip;
@@ -59,8 +60,11 @@
           // depth vert in global space
           vec4 projectedVertex = T * vec4(imageLoad(inVertex, ivec2(pix)).xyz, 1.0f);
           // this depth vert in global space is then prejected back to normal depth space
-		  vec3 projPixel = projectPointImage(projectedVertex.xyz);
-          if (projPixel.x < 0.0f || int(projPixel.x) > refSize.x || projPixel.y < 0.0f || int(projPixel.y) > refSize.y)
+      //vec3 projPixel = projectPointImage(projectedVertex.xyz);
+      vec4 projectedPos = view * projectedVertex;
+      vec2 projPixel = vec2(projectedPos.x / projectedPos.z + 0.5f, projectedPos.y / projectedPos.z + 0.5f);
+      
+      if (projPixel.x < 0.0f || int(projPixel.x) > refSize.x || projPixel.y < 0.0f || int(projPixel.y) > refSize.y)
           {
             trackOutput.data[offset].result = -2.0f;
             imageStore(trackImage, ivec2(pix), uvec4(255, 0, 0, 255));

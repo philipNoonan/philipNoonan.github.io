@@ -212,7 +212,7 @@
 
 <script src="node_modules/gl-matrix/gl-matrix-min.js"></script>
 <script src="node_modules/luqr/luqr.min.js"></script>
-<script src="node_modules/mathjs/dist/math.min.js"></script>
+<script src="node_modules/mathjs/dist/math.js"></script>
 
 <script src="depth-camera.js"></script>
 <script src="src/depthToVert.js"></script>
@@ -373,7 +373,7 @@
   //    invK[9] = -camPam[1] / camPam[3];
 
   var volDim = [0.5, 0.5, 0.5];    
-  var volSize = [64.0, 64.0, 64.0];
+  var volSize = [128.0, 128.0, 128.0];
 
   var imageSize = [848, 480];
 
@@ -388,7 +388,7 @@
 
   var frameCounter = 1;
 
-  //glMatrix.mat4.translate(pose, pose, [volDim[0] / 2.0, volDim[1] / 2.0, 0.0]);
+  glMatrix.mat4.translate(pose, pose, [volDim[0] / 2.0, volDim[1] / 2.0, 0.0]);
   initPose = [...pose];
   glMatrix.mat4.invert(invIP, initPose);
 
@@ -509,7 +509,7 @@
     }
 
     _twistMatrix(_result) {
-      var sqrMat = [[0.0, _result[2], _result[1], _result[3]],
+      let sqrMat = [[0.0, _result[2], _result[1], _result[3]],
                  [_result[2], 0.0, _result[0], _result[4]],
                  [-_result[1], _result[1], 0.0, _result[5]],
                  [0.0, 0.0, 0.0, 0.0]];
@@ -522,8 +522,8 @@
 
       let A = Array.from(_A);
       let b = Array.from(_b);
-      var folded_A = luqr.fold(A, 6);
-      var res = Array(6);
+      let folded_A = luqr.fold(A, 6);
+      let res = Array(6);
       res = luqr.solve(folded_A,b);
       if (res != null)
       {
@@ -612,10 +612,17 @@
 
       gl.useProgram(p2pTrackProg);
 
+      let projRef = glMatrix.mat4.create();
+      let invPose = glMatrix.mat4.create();
+      glMatrix.mat4.invert(invPose, pose);
+
+      glMatrix.mat4.mul(projRef, K, invPose);
+
       // buffers
       gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboReduction);
       // uniforms 
       gl.uniformMatrix4fv(gl.getUniformLocation(p2pTrackProg, "T"), false, _T);
+      gl.uniformMatrix4fv(gl.getUniformLocation(p2pTrackProg, "view"), false, projRef);
 
       gl.uniform1f(gl.getUniformLocation(p2pTrackProg, "distThresh"), 0.01);
       gl.uniform1f(gl.getUniformLocation(p2pTrackProg, "normThresh"), 0.9);
@@ -644,7 +651,6 @@
       // buffers
       gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboReduction);
       gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, gl.ssboReductionOutput);
-
 
       gl.dispatchCompute(8, 1, 1);
       gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
@@ -678,7 +684,7 @@
 
       gl.useProgram(integrateProg);
 
-      var invPose = glMatrix.mat4.create();
+      let invPose = glMatrix.mat4.create();
       glMatrix.mat4.invert(invPose, pose);
 
       gl.uniform4fv(gl.getUniformLocation(integrateProg, "cam"), camPam);
@@ -722,7 +728,7 @@
       gl.bindImageTexture(1, gl.refVertex_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
       gl.bindImageTexture(2, gl.refNormal_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
       
-      var view = glMatrix.mat4.create();
+      let view = glMatrix.mat4.create();
       glMatrix.mat4.mul(view, pose, invK);
 
       let dMin = -volDim[0] / 20.0;
@@ -796,6 +802,7 @@
           this._getReduction(A, b, icpData);
           this._solve(A, b, result);
           this._resultToMatrix(result, delta);
+
           glMatrix.mat4.mul(T, delta, T);
         }
         pose = [...T];
@@ -831,10 +838,11 @@
         for (let i = 0; i < 2; i++)
         {
           var twistedResult = this._twistMatrix(result);
+          let tempT = math.flatten(math.expm(twistedResult));
 
           var currT = glMatrix.mat4.create();
-
-          currT = math.expm(twistedResult);
+          
+          for (var iter=0; iter<tempT.length; iter++) currT[iter] = tempT[iter];      
 
           this._trackP2V(currT, level);
           this._reduceP2V();
@@ -842,18 +850,19 @@
 
           let scaling = 1.0 / (Math.max(...A) > 0.0 ? Math.max(...A) : 1.0);
 
-          A *= scaling;
-          b *= scaling;
+          for (let iter = 0; iter < 36; iter++) A[iter] *= scaling;
+          for (let iter = 0; iter < 6; iter++) b[iter] *= scaling;
 
           //A = A + (i) <-- need to use some mathjs matrix multiplacation stuff here since A is 6x6
 
           var deltaResult = new Float32Array(6);
 
           this._solve(A, b, deltaResult);
+          var change = [0, 0, 0, 0, 0, 0];
 
-          result = result - deltaResult;
+          for (let iter = 0; iter < 6; iter++) result[iter] -= deltaResult[iter];
+          for (let iter = 0; iter < 6; iter++) change[iter] = result[iter] - deltaResult[iter];
 
-          var change = result - resultPrev;
           var Cnorm = math.norm(change);
 
           resultPrev = result;
@@ -909,6 +918,7 @@
                        renderVertFlag << 4;
 
       gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
+      gl.uniform2fv(gl.getUniformLocation(renderProgram, "imageSize"), imageSize);
 
 
       gl.activeTexture(gl.TEXTURE0);
@@ -1133,9 +1143,6 @@
   
       var pixel_shader = gl.createShader(gl.FRAGMENT_SHADER);
 	  
-	  
-	  
-	  
       gl.shaderSource(pixel_shader, fragmentShaderSource);
       gl.compileShader(pixel_shader);
 	  
@@ -1143,12 +1150,7 @@
 		console.log(gl.getShaderInfoLog(pixel_shader));
 		return;
 		}
-  
-
-  
-  
-  
-
+ 
       renderProgram  = gl.createProgram();
       gl.attachShader(renderProgram, vertex_shader);
       gl.attachShader(renderProgram, pixel_shader);
