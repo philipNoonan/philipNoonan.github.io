@@ -159,7 +159,7 @@
   </style>
   <div>
     <label>WebGL2.0-Compute Powered ICP wglFusion:</label>
-    <canvas id="canvasGL" width="848" height="480"></canvas>
+    <canvas id="canvasGL" width="1696" height="720"></canvas>
   </div>
 </template>
 
@@ -171,6 +171,12 @@
   <div class="select">
     <label for="selectVideoDevice">Capture device with depth stream</label>
     <select id="selectVideoDevice"></select>
+  </div>
+  <div class="slidecontainer">
+    <input type="range" min="0.05" max="5" value="0.5" class="slider" id="volumeLength">
+    <p>Lenght in m: <span id="volLength"></span></p>
+    <input type="range" min="5" max="9" step="1" value="6" class="slider" id="numberVoxels">
+    <p>Resolution in voxels: <span id="numVox"></span></p>
   </div>
   <div id="buttoncontainer">
     <button onclick="resetVolume()">Reset Volume</button>
@@ -225,6 +231,10 @@
 <script src="src/reduceP2V.js"></script>
 <script src="src/render.js"></script>
 <script src="src/getClickedPoint.js"></script>
+<script src="src/ploting.js"></script>
+
+
+
 
 
 
@@ -333,6 +343,26 @@
 
 }
 
+
+  // UI stuff
+  var sliderVolumeLength = document.getElementById("volumeLength");
+  var sliderNumberVoxels = document.getElementById("numberVoxels");
+
+  var textVolumeLength = document.getElementById("volLength");
+  var textNumberVoxels = document.getElementById("numVox");
+
+  textVolumeLength.innerHTML = sliderVolumeLength.value;
+  textNumberVoxels.innerHTML = Math.pow(2,sliderNumberVoxels.value);
+
+  sliderVolumeLength.oninput = function() {
+    textVolumeLength.innerHTML = this.value;
+  }
+
+  sliderNumberVoxels.oninput = function() {
+    textNumberVoxels.innerHTML = Math.pow(2, this.value);
+  }
+
+
   // programs
   var depthToVertProg;
   var vertToNormProg;
@@ -343,8 +373,11 @@
   var p2vTrackProg;
   var p2vReduceProg;
 
+  var plottingBufferProg;
   var clickedPointProg;
   var renderProgram;
+
+  var plottingRenderProgram;
 
   var resetFlag = 0;
   var integrateFlag = 1;
@@ -395,7 +428,8 @@
   var mouseClickPos = [imageSize[0] / 2, imageSize[1] / 2];
   
 
-  
+  function normalize(val, max, min) { return (val - min) / (max - min); }
+
 
   customElements.define('video-stream', class extends HTMLElement {
     constructor() {
@@ -467,8 +501,46 @@
 
     }
 
+    
+
+    _uploadGraphPoints(_x, _y, _z) {
+      const gl = this.gl;
+
+      gl.useProgram(plottingBufferProg);
+
+      let scaledX = normalize(_x, initPose[12]+0.1, initPose[12]-0.1);
+      let scaledY = normalize(_y, initPose[13]+0.1, initPose[13]-0.1);
+      let scaledZ = normalize(_z, initPose[14]+0.1, initPose[14]-0.1);
 
 
+
+      gl.uniform4fv(gl.getUniformLocation(plottingBufferProg, "newData"), [scaledX, scaledY, scaledZ, 0.0]);
+      gl.uniform1i(gl.getUniformLocation(plottingBufferProg, "pingPong"), frameCounter % 2);
+
+      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboGraphX);
+      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, gl.ssboGraphY);
+      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 2, gl.ssboGraphZ);
+
+      gl.dispatchCompute(1, 1, 1);
+      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+     // let xpos = new Float32Array(2 * 1024);
+      // let ypos = new Float32Array(2 * 1024);
+      // let zpos = new Float32Array(2 * 1024);
+
+      //gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboGraphX);
+      //gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, xpos);
+
+      // gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboGraphY);
+      // gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 1, ypos); 
+
+      // gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboGraphZ);
+      // gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 2, zpos);
+
+      //var sds = 1;
+
+
+    }
 
 
 
@@ -891,6 +963,9 @@
     _frameLoop() {
       const gl = this.gl;
 
+      let c = this.shadowRoot.getElementById("canvasGL");
+
+
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
 
@@ -908,42 +983,77 @@
 
       //this._calcPoseP2V();
 
+      this._uploadGraphPoints(pose[12], pose[13], pose[14]);
+
+      gl.viewport(0, 0, c.width, 240);
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      gl.useProgram(plottingRenderProgram);
+      gl.uniform2fv(gl.getUniformLocation(plottingRenderProgram, "imageSize"), [1024.0, 240.0]);
+
+      gl.uniform1i(gl.getUniformLocation(plottingRenderProgram, "axis"), 0);
+      gl.drawArrays(gl.POINTS, 0, 1024);     
+
+      gl.uniform1i(gl.getUniformLocation(plottingRenderProgram, "axis"), 1);
+      gl.drawArrays(gl.POINTS, 0, 1024);
+
+      gl.uniform1i(gl.getUniformLocation(plottingRenderProgram, "axis"), 2);
+      gl.drawArrays(gl.POINTS, 0, 1024);
+
+
+
+      gl.viewport(0, 240, c.width / 2.0, c.height - 240);
 
 		  gl.useProgram(renderProgram);
 
       let renderOpts = renderDepthFlag << 0 | 
-                       renderRefNormFlag << 1 |
-                       renderRefVertFlag << 2 |
-                       renderNormFlag << 3 |
-                       renderVertFlag << 4;
+                      renderRefNormFlag << 1 |
+                      renderRefVertFlag << 2 |
+                      renderNormFlag << 3 |
+                      renderVertFlag << 4;
 
       gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
       gl.uniform2fv(gl.getUniformLocation(renderProgram, "imageSize"), imageSize);
 
-
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
-      // gl.activeTexture(gl.TEXTURE1);
-      // gl.bindTexture(gl.TEXTURE_2D, gl.refNormal_texture);
-      // gl.activeTexture(gl.TEXTURE2);
-      // gl.bindTexture(gl.TEXTURE_2D, gl.refVertex_texture);
-      // gl.activeTexture(gl.TEXTURE3);
-      // gl.bindTexture(gl.TEXTURE_2D, gl.normal_texture);
-      // gl.activeTexture(gl.TEXTURE4);
-      // gl.bindTexture(gl.TEXTURE_2D, gl.vertex_texture);
-
-      //gl.bindImageTexture(0, gl.depth_texture, 0, false, 0, gl.READ_ONLY, gl.R32F)
       gl.bindImageTexture(1, gl.refNormal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
       gl.bindImageTexture(2, gl.refVertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
       gl.bindImageTexture(3, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
       gl.bindImageTexture(4, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-
 
       gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
       gl.vertexAttribPointer(gl.vertex_location, 2, gl.FLOAT, false, 0, 0);
 
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.index_buffer);
       gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+
+
+      gl.viewport(c.width / 2.0, 240, c.width / 2.0, c.height - 240);
+
+      renderOpts = 0 << 0 | 
+                       1 << 1 |
+                       0 << 2 |
+                       0 << 3 |
+                       0 << 4;
+
+      gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
+      gl.uniform2fv(gl.getUniformLocation(renderProgram, "imageSize"), imageSize);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
+      gl.bindImageTexture(1, gl.refNormal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
+      gl.bindImageTexture(2, gl.refVertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
+      gl.bindImageTexture(3, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
+      gl.bindImageTexture(4, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
+      gl.vertexAttribPointer(gl.vertex_location, 2, gl.FLOAT, false, 0, 0);
+
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.index_buffer);
+      gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+
 
       frameCounter++;
       if (!this.paused)
@@ -1126,8 +1236,76 @@
     return;
   }
 
+  const plottingBufferShader = gl.createShader(gl.COMPUTE_SHADER);
+  gl.shaderSource(plottingBufferShader, plottingBufferSource);
+  gl.compileShader(plottingBufferShader);
+  if (!gl.getShaderParameter(plottingBufferShader, gl.COMPILE_STATUS)) {
+    console.log(gl.getShaderInfoLog(plottingBufferShader));
+    return;
+  }
+  
+
+
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  plottingBufferProg = gl.createProgram();
+  gl.attachShader(plottingBufferProg, plottingBufferShader);
+  gl.linkProgram(plottingBufferProg);
+  if (!gl.getProgramParameter(plottingBufferProg, gl.LINK_STATUS)) {
+    console.log(gl.getProgramInfoLog(plottingBufferProg));
+    return;
+  }
+
+  var plottingVertex_shader = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(plottingVertex_shader, plottingVertexShaderSource);
+  gl.compileShader(plottingVertex_shader);
+	if (!gl.getShaderParameter(plottingVertex_shader, gl.COMPILE_STATUS)) {
+		console.log(gl.getShaderInfoLog(plottingVertex_shader));
+		return;
+	}
+  
+  var plottingFragment_shader = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(plottingFragment_shader, plottingFragmentShaderSource);
+  gl.compileShader(plottingFragment_shader);
+	if (!gl.getShaderParameter(plottingFragment_shader, gl.COMPILE_STATUS)) {
+		console.log(gl.getShaderInfoLog(plottingFragment_shader));
+		return;
+	}
+ 
+  let emptyGraphPoints = new Float32Array(2*1024);
+  var ssboGraphX = gl.createBuffer();
+  gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphX);
+  gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
+  var ssboGraphY = gl.createBuffer();
+  gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphY);
+  gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
+  var ssboGraphZ = gl.createBuffer();
+  gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphZ);
+  gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
+  
+  plottingRenderProgram  = gl.createProgram();
+  gl.attachShader(plottingRenderProgram, plottingVertex_shader);
+  gl.attachShader(plottingRenderProgram, plottingFragment_shader);
+  gl.linkProgram(plottingRenderProgram);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphX);
+  gl.enableVertexAttribArray(1);
+  gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphY);
+  gl.enableVertexAttribArray(2);
+  gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphZ);
+  gl.enableVertexAttribArray(3);
+  gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 0, 0);
+
+
+
+
+
+
 
   
   
@@ -1151,7 +1329,7 @@
 		return;
 		}
  
-      renderProgram  = gl.createProgram();
+      renderProgram = gl.createProgram();
       gl.attachShader(renderProgram, vertex_shader);
       gl.attachShader(renderProgram, pixel_shader);
       gl.linkProgram(renderProgram);
@@ -1159,7 +1337,7 @@
 
       var vertex_location = gl.getAttribLocation(renderProgram, "v");
       gl.enableVertexAttribArray(vertex_location);
-      gl.uniform1i(gl.getUniformLocation(renderProgram, "s"), 0);
+      //gl.uniform1i(gl.getUniformLocation(renderProgram, "s"), 0);
 
       var vertex_buffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
@@ -1184,6 +1362,8 @@
       var ssboClickedPoint = gl.createBuffer();
       gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboClickedPoint);
       gl.bufferData(gl.SHADER_STORAGE_BUFFER, arrClicked, gl.DYNAMIC_COPY);
+
+
 
       var depth_texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, depth_texture);
@@ -1233,6 +1413,21 @@
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, render_texture, 0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
+      var renderGraph_texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, renderGraph_texture);
+	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8UI, 1024, 240);
+
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+      // Framebuffer for reading back the texture.
+      var framebufferGraph = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebufferGraph);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, renderGraph_texture, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
       var vertex_texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, vertex_texture);
 	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, imageSize[0], imageSize[1]);
@@ -1277,6 +1472,10 @@
       gl.ssboReductionOutput = ssboReductionOutput;
       gl.ssboClickedPoint = ssboClickedPoint;
 
+      gl.ssboGraphX = ssboGraphX;
+      gl.ssboGraphY = ssboGraphY;
+      gl.ssboGraphZ = ssboGraphZ;
+
       gl.depth_texture = depth_texture;
       gl.vertex_texture = vertex_texture;
       gl.normal_texture = normal_texture;
@@ -1288,6 +1487,7 @@
 
 
       gl.framebuffer = framebuffer;
+      gl.framebufferGraph = framebufferGraph;
 
       return gl;
     }
