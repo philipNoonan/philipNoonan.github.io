@@ -173,41 +173,30 @@
     <select id="selectVideoDevice"></select>
   </div>
   <div class="slidecontainer">
-    <input type="range" min="0.05" max="5" value="0.5" class="slider" id="volumeLength">
     <p>Lenght in m: <span id="volLength"></span></p>
-    <input type="range" min="5" max="9" step="1" value="6" class="slider" id="numberVoxels">
+    <input type="range" min="0.05" max="5" step="0.01" value="0.5" class="slider" id="volumeLength">
     <p>Resolution in voxels: <span id="numVox"></span></p>
+    <input type="range" min="5" max="9" step="1" value="6" class="slider" id="numberVoxels">
   </div>
   <div id="buttoncontainer">
     <button onclick="resetVolume()">Reset Volume</button>
-  </div>
-  <div>
     <button onclick="integrateClick()">Integrate Volume</button>
     <input type="radio" id="integrateRadio" checked>
   </div>
   <div>
     <button onclick="renderDepthClick()">Render Depth</button>
     <input type="radio" id="renderDepthRadio" checked>
-  </div>
-  <div>
     <button onclick="renderRefNormClick()">Render refNorm</button>
     <input type="radio" id="renderRefNormRadio">
-  </div>
-  <div>
     <button onclick="renderRefVertClick()">Render refVert</button>
     <input type="radio" id="renderRefVertRadio">
-  </div>
-  <div>
     <button onclick="renderNormClick()">Render Norm</button>
     <input type="radio" id="renderNormRadio">
-  </div>
-  <div>
     <button onclick="renderVertClick()">Render Vert</button>
     <input type="radio" id="renderVertRadio">
   </div>
   <div id="tabcontainer">
     <input id="tab1" type="radio" name="tabs" value="basic" checked="checked" data-ontaboff="stopBasicTab" data-ontabon="startBasicTab"/>
-    <label for="tab1">Render depth</label>
     <div id="tabcontent">
       <div id = tabcontent1>
         <video-stream></video-stream>
@@ -219,7 +208,14 @@
 <script src="node_modules/gl-matrix/gl-matrix-min.js"></script>
 <script src="node_modules/luqr/luqr.min.js"></script>
 <script src="node_modules/mathjs/dist/math.js"></script>
+<script src="node_modules/stats.js/build/stats.min.js"></script>
 
+
+<script src="src/createAndCompileShader.js"></script>
+<script src="src/createComputeProgram.js"></script>
+<script src="src/createRenderProgram.js"></script>
+<script src="src/generateTexture.js"></script>
+<script src="src/reset.js"></script>
 <script src="depth-camera.js"></script>
 <script src="src/depthToVert.js"></script>
 <script src="src/vertToNorm.js"></script>
@@ -254,9 +250,15 @@
 
 
   function resetVolume() {
+
     integrateFlag = 0;
     resetFlag = 1;
     pose = [...initPose];
+
+    volSize = [Math.pow(2,sliderNumberVoxels.value), Math.pow(2,sliderNumberVoxels.value), Math.pow(2,sliderNumberVoxels.value)]
+  
+
+  
   }
 
   function integrateClick() {
@@ -362,6 +364,10 @@
     textNumberVoxels.innerHTML = Math.pow(2, this.value);
   }
 
+  var stats = new Stats();
+  stats.showPanel(0);
+  stats.domElement.style.cssText = 'position:absolute;top:0px;right:0px;';
+  document.body.appendChild(stats.dom);
 
   // programs
   var depthToVertProg;
@@ -405,8 +411,7 @@
   //    invK[8] = -camPam[0] / camPam[2];
   //    invK[9] = -camPam[1] / camPam[3];
 
-  var volDim = [0.5, 0.5, 0.5];    
-  var volSize = [128.0, 128.0, 128.0];
+  var volSize = [Math.pow(2,sliderNumberVoxels.value), Math.pow(2,sliderNumberVoxels.value), Math.pow(2,sliderNumberVoxels.value)];
 
   var imageSize = [848, 480];
 
@@ -421,7 +426,7 @@
 
   var frameCounter = 1;
 
-  glMatrix.mat4.translate(pose, pose, [volDim[0] / 2.0, volDim[1] / 2.0, 0.0]);
+  glMatrix.mat4.translate(pose, pose, [sliderVolumeLength.value / 2.0, sliderVolumeLength.value / 2.0, 0.0]);
   initPose = [...pose];
   glMatrix.mat4.invert(invIP, initPose);
 
@@ -481,6 +486,8 @@
     _getClickedPoint() {
       const gl = this.gl;
 
+      resetVol(gl);
+
       gl.useProgram(clickedPointProg);
 
       gl.uniform2fv(gl.getUniformLocation(clickedPointProg, "clickedPoint"), mouseClickPos);
@@ -496,7 +503,7 @@
       gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, clickedVert);
 
       initPose = glMatrix.mat4.create();
-      glMatrix.mat4.translate(initPose, initPose, [-clickedVert[0] + volDim[0] / 2.0, -clickedVert[1] + volDim[1] / 2.0, -clickedVert[2] + volDim[2] / 2.0]);
+      glMatrix.mat4.translate(initPose, initPose, [-clickedVert[0] + sliderVolumeLength.value / 2.0, -clickedVert[1] + sliderVolumeLength.value / 2.0, -clickedVert[2] + sliderVolumeLength.value / 2.0]);
       pose = [...initPose];
 
     }
@@ -523,22 +530,6 @@
 
       gl.dispatchCompute(1, 1, 1);
       gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-     // let xpos = new Float32Array(2 * 1024);
-      // let ypos = new Float32Array(2 * 1024);
-      // let zpos = new Float32Array(2 * 1024);
-
-      //gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboGraphX);
-      //gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, xpos);
-
-      // gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboGraphY);
-      // gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 1, ypos); 
-
-      // gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboGraphZ);
-      // gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 2, zpos);
-
-      //var sds = 1;
-
 
     }
 
@@ -741,7 +732,7 @@
       gl.bindImageTexture(3, gl.render_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA8UI);
 
       gl.uniformMatrix4fv(gl.getUniformLocation(p2vTrackProg, "T"), false, _T);
-      gl.uniform1f(gl.getUniformLocation(p2vTrackProg, "volDim"), volDim[0]);
+      gl.uniform1f(gl.getUniformLocation(p2vTrackProg, "volDim"), sliderVolumeLength.value);
       gl.uniform1f(gl.getUniformLocation(p2vTrackProg, "volSize"), volSize[0]);
       gl.uniform1i(gl.getUniformLocation(p2vTrackProg, "mip"), _level);
 
@@ -769,7 +760,7 @@
       gl.uniform1i(gl.getUniformLocation(integrateProg, "p2v"), 0);
 
       gl.uniform1f(gl.getUniformLocation(integrateProg, "maxWeight"), 100.0);
-      gl.uniform1f(gl.getUniformLocation(integrateProg, "volDim"), volDim[0]);
+      gl.uniform1f(gl.getUniformLocation(integrateProg, "volDim"), sliderVolumeLength.value);
       gl.uniform1f(gl.getUniformLocation(integrateProg, "volSize"), volSize[0]);
 
 
@@ -803,17 +794,17 @@
       let view = glMatrix.mat4.create();
       glMatrix.mat4.mul(view, pose, invK);
 
-      let dMin = -volDim[0] / 20.0;
-      let dMax = volDim[0] / 10.0;
+      let dMin = -sliderVolumeLength.value / 20.0;
+      let dMax = sliderVolumeLength.value / 10.0;
 
-      let step = volDim[0] / volSize[0];
+      let step = sliderVolumeLength.value / volSize[0];
 
       gl.uniformMatrix4fv(gl.getUniformLocation(raycastProg, "view"), false, view);
       gl.uniform1f(gl.getUniformLocation(raycastProg, "step"), step);
       gl.uniform1f(gl.getUniformLocation(raycastProg, "largeStep"), 0.5 * 0.75);
       gl.uniform1f(gl.getUniformLocation(raycastProg, "nearPlane"), 0.01);
       gl.uniform1f(gl.getUniformLocation(raycastProg, "farPlane"), 3.0);
-      gl.uniform1f(gl.getUniformLocation(raycastProg, "volDim"), volDim[0]);
+      gl.uniform1f(gl.getUniformLocation(raycastProg, "volDim"), sliderVolumeLength.value);
       gl.uniform1f(gl.getUniformLocation(raycastProg, "volSize"), volSize[0]);
 
       gl.dispatchCompute(this.video.width / 32, this.video.height / 32, 1);
@@ -962,6 +953,7 @@
 
     _frameLoop() {
       const gl = this.gl;
+      stats.begin();
 
       let c = this.shadowRoot.getElementById("canvasGL");
 
@@ -1056,6 +1048,7 @@
 
 
       frameCounter++;
+      stats.end();
       if (!this.paused)
         window.requestAnimationFrame(this._frameLoop);
     }
@@ -1091,253 +1084,55 @@
       })
 
 
-  // CREATE SHADERS
-  const depthToVertShader = gl.createShader(gl.COMPUTE_SHADER);
-  gl.shaderSource(depthToVertShader, depthToVertSource);
-  gl.compileShader(depthToVertShader);
-  if (!gl.getShaderParameter(depthToVertShader, gl.COMPILE_STATUS)) {
-    console.log(gl.getShaderInfoLog(depthToVertShader));
-    return;
-  }
-  
-  depthToVertProg = gl.createProgram();
-  gl.attachShader(depthToVertProg, depthToVertShader);
-  gl.linkProgram(depthToVertProg);
-  if (!gl.getProgramParameter(depthToVertProg, gl.LINK_STATUS)) {
-    console.log(gl.getProgramInfoLog(depthToVertProg));
-    return;
-  }
+      // COMPUTE SHADERS
+      depthToVertProg = createComputeProgram(gl, depthToVertSource);  
+      vertToNormProg = createComputeProgram(gl, vertToNormSource);  
+      integrateProg = createComputeProgram(gl, integrateSource);  
+      raycastProg = createComputeProgram(gl, raycastSource);  
+      p2pTrackProg = createComputeProgram(gl, p2pTrackSource);  
+      p2pReduceProg = createComputeProgram(gl, p2pReduceSource);  
+      p2vTrackProg = createComputeProgram(gl, p2vTrackSource);  
+      p2vReduceProg = createComputeProgram(gl, p2vReduceSource);  
+      clickedPointProg = createComputeProgram(gl, clickedPointSource);  
+      plottingBufferProg = createComputeProgram(gl, plottingBufferSource);  
+      // VERTEX FRAGMENT SHADERS
+      plottingRenderProgram = createRenderProgram(gl, plottingVertexShaderSource, plottingFragmentShaderSource);
+      renderProgram = createRenderProgram(gl, vertexShaderSource, fragmentShaderSource);
 
-  const vertToNormShader = gl.createShader(gl.COMPUTE_SHADER);
-  gl.shaderSource(vertToNormShader, vertToNormSource);
-  gl.compileShader(vertToNormShader);
-  if (!gl.getShaderParameter(vertToNormShader, gl.COMPILE_STATUS)) {
-    console.log(gl.getShaderInfoLog(vertToNormShader));
-    return;
-  }
-  
-  vertToNormProg = gl.createProgram();
-  gl.attachShader(vertToNormProg, vertToNormShader);
-  gl.linkProgram(vertToNormProg);
-  if (!gl.getProgramParameter(vertToNormProg, gl.LINK_STATUS)) {
-    console.log(gl.getProgramInfoLog(vertToNormProg));
-    return;
-  }
-
-  const integrateShader = gl.createShader(gl.COMPUTE_SHADER);
-  gl.shaderSource(integrateShader, integrateSource);
-  gl.compileShader(integrateShader);
-  if (!gl.getShaderParameter(integrateShader, gl.COMPILE_STATUS)) {
-    console.log(gl.getShaderInfoLog(integrateShader));
-    return;
-  }
-  
-  integrateProg = gl.createProgram();
-  gl.attachShader(integrateProg, integrateShader);
-  gl.linkProgram(integrateProg);
-  if (!gl.getProgramParameter(integrateProg, gl.LINK_STATUS)) {
-    console.log(gl.getProgramInfoLog(integrateProg));
-    return;
-  }
-
-  const raycastShader = gl.createShader(gl.COMPUTE_SHADER);
-  gl.shaderSource(raycastShader, raycastSource);
-  gl.compileShader(raycastShader);
-  if (!gl.getShaderParameter(raycastShader, gl.COMPILE_STATUS)) {
-    console.log(gl.getShaderInfoLog(raycastShader));
-    return;
-  }
-  
-  raycastProg = gl.createProgram();
-  gl.attachShader(raycastProg, raycastShader);
-  gl.linkProgram(raycastProg);
-  if (!gl.getProgramParameter(raycastProg, gl.LINK_STATUS)) {
-    console.log(gl.getProgramInfoLog(raycastProg));
-    return;
-  }
-
-  const p2pTrackShader = gl.createShader(gl.COMPUTE_SHADER);
-  gl.shaderSource(p2pTrackShader, p2pTrackSource);
-  gl.compileShader(p2pTrackShader);
-  if (!gl.getShaderParameter(p2pTrackShader, gl.COMPILE_STATUS)) {
-    console.log(gl.getShaderInfoLog(p2pTrackShader));
-    return;
-  }
-  
-  p2pTrackProg = gl.createProgram();
-  gl.attachShader(p2pTrackProg, p2pTrackShader);
-  gl.linkProgram(p2pTrackProg);
-  if (!gl.getProgramParameter(p2pTrackProg, gl.LINK_STATUS)) {
-    console.log(gl.getProgramInfoLog(p2pTrackProg));
-    return;
-  }
-
-  const p2pReduceShader = gl.createShader(gl.COMPUTE_SHADER);
-  gl.shaderSource(p2pReduceShader, p2pReduceSource);
-  gl.compileShader(p2pReduceShader);
-  if (!gl.getShaderParameter(p2pReduceShader, gl.COMPILE_STATUS)) {
-    console.log(gl.getShaderInfoLog(p2pReduceShader));
-    return;
-  }
-  
-  p2pReduceProg = gl.createProgram();
-  gl.attachShader(p2pReduceProg, p2pReduceShader);
-  gl.linkProgram(p2pReduceProg);
-  if (!gl.getProgramParameter(p2pReduceProg, gl.LINK_STATUS)) {
-    console.log(gl.getProgramInfoLog(p2pReduceProg));
-    return;
-  }
-
-  const p2vTrackShader = gl.createShader(gl.COMPUTE_SHADER);
-  gl.shaderSource(p2vTrackShader, p2vTrackSource);
-  gl.compileShader(p2vTrackShader);
-  if (!gl.getShaderParameter(p2vTrackShader, gl.COMPILE_STATUS)) {
-    console.log(gl.getShaderInfoLog(p2vTrackShader));
-    return;
-  }
-  
-  p2vTrackProg = gl.createProgram();
-  gl.attachShader(p2vTrackProg, p2vTrackShader);
-  gl.linkProgram(p2vTrackProg);
-  if (!gl.getProgramParameter(p2vTrackProg, gl.LINK_STATUS)) {
-    console.log(gl.getProgramInfoLog(p2vTrackProg));
-    return;
-  }
-
-  const p2vReduceShader = gl.createShader(gl.COMPUTE_SHADER);
-  gl.shaderSource(p2vReduceShader, p2vReduceSource);
-  gl.compileShader(p2vReduceShader);
-  if (!gl.getShaderParameter(p2vReduceShader, gl.COMPILE_STATUS)) {
-    console.log(gl.getShaderInfoLog(p2vReduceShader));
-    return;
-  }
-  
-  p2vReduceProg = gl.createProgram();
-  gl.attachShader(p2vReduceProg, p2vReduceShader);
-  gl.linkProgram(p2vReduceProg);
-  if (!gl.getProgramParameter(p2vReduceProg, gl.LINK_STATUS)) {
-    console.log(gl.getProgramInfoLog(p2vReduceProg));
-    return;
-  }
-
-  const clickedPointShader = gl.createShader(gl.COMPUTE_SHADER);
-  gl.shaderSource(clickedPointShader, clickedPointSource);
-  gl.compileShader(clickedPointShader);
-  if (!gl.getShaderParameter(clickedPointShader, gl.COMPILE_STATUS)) {
-    console.log(gl.getShaderInfoLog(clickedPointShader));
-    return;
-  }
-  
-  clickedPointProg = gl.createProgram();
-  gl.attachShader(clickedPointProg, clickedPointShader);
-  gl.linkProgram(clickedPointProg);
-  if (!gl.getProgramParameter(clickedPointProg, gl.LINK_STATUS)) {
-    console.log(gl.getProgramInfoLog(clickedPointProg));
-    return;
-  }
-
-  const plottingBufferShader = gl.createShader(gl.COMPUTE_SHADER);
-  gl.shaderSource(plottingBufferShader, plottingBufferSource);
-  gl.compileShader(plottingBufferShader);
-  if (!gl.getShaderParameter(plottingBufferShader, gl.COMPILE_STATUS)) {
-    console.log(gl.getShaderInfoLog(plottingBufferShader));
-    return;
-  }
-  
+      // BINDING BUFFERS
+      gl.useProgram(plottingRenderProgram);
 
 
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-  plottingBufferProg = gl.createProgram();
-  gl.attachShader(plottingBufferProg, plottingBufferShader);
-  gl.linkProgram(plottingBufferProg);
-  if (!gl.getProgramParameter(plottingBufferProg, gl.LINK_STATUS)) {
-    console.log(gl.getProgramInfoLog(plottingBufferProg));
-    return;
-  }
+      let emptyGraphPoints = new Float32Array(2*1024);
+      var ssboGraphX = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphX);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
+      var ssboGraphY = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphY);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
+      var ssboGraphZ = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphZ);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
 
-  var plottingVertex_shader = gl.createShader(gl.VERTEX_SHADER);
-  gl.shaderSource(plottingVertex_shader, plottingVertexShaderSource);
-  gl.compileShader(plottingVertex_shader);
-	if (!gl.getShaderParameter(plottingVertex_shader, gl.COMPILE_STATUS)) {
-		console.log(gl.getShaderInfoLog(plottingVertex_shader));
-		return;
-	}
-  
-  var plottingFragment_shader = gl.createShader(gl.FRAGMENT_SHADER);
-  gl.shaderSource(plottingFragment_shader, plottingFragmentShaderSource);
-  gl.compileShader(plottingFragment_shader);
-	if (!gl.getShaderParameter(plottingFragment_shader, gl.COMPILE_STATUS)) {
-		console.log(gl.getShaderInfoLog(plottingFragment_shader));
-		return;
-	}
- 
-  let emptyGraphPoints = new Float32Array(2*1024);
-  var ssboGraphX = gl.createBuffer();
-  gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphX);
-  gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
-  var ssboGraphY = gl.createBuffer();
-  gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphY);
-  gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
-  var ssboGraphZ = gl.createBuffer();
-  gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphZ);
-  gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
-  
-  plottingRenderProgram  = gl.createProgram();
-  gl.attachShader(plottingRenderProgram, plottingVertex_shader);
-  gl.attachShader(plottingRenderProgram, plottingFragment_shader);
-  gl.linkProgram(plottingRenderProgram);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphX);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
 
-  gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphX);
-  gl.enableVertexAttribArray(1);
-  gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphY);
+      gl.enableVertexAttribArray(2);
+      gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
 
-  gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphY);
-  gl.enableVertexAttribArray(2);
-  gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphZ);
-  gl.enableVertexAttribArray(3);
-  gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphZ);
+      gl.enableVertexAttribArray(3);
+      gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 0, 0);
 
 
-
-
-
-
-
-  
-  
-      // Shaders and program are needed only if rendering depth texture.
-      var vertex_shader = gl.createShader(gl.VERTEX_SHADER);
-      gl.shaderSource(vertex_shader, vertexShaderSource);
-      gl.compileShader(vertex_shader);
-
-	if (!gl.getShaderParameter(vertex_shader, gl.COMPILE_STATUS)) {
-		console.log(gl.getShaderInfoLog(vertex_shader));
-		return;
-	}
-  
-      var pixel_shader = gl.createShader(gl.FRAGMENT_SHADER);
-	  
-      gl.shaderSource(pixel_shader, fragmentShaderSource);
-      gl.compileShader(pixel_shader);
-	  
-	    if (!gl.getShaderParameter(pixel_shader, gl.COMPILE_STATUS)) {
-		console.log(gl.getShaderInfoLog(pixel_shader));
-		return;
-		}
- 
-      renderProgram = gl.createProgram();
-      gl.attachShader(renderProgram, vertex_shader);
-      gl.attachShader(renderProgram, pixel_shader);
-      gl.linkProgram(renderProgram);
       gl.useProgram(renderProgram);
-
       var vertex_location = gl.getAttribLocation(renderProgram, "v");
       gl.enableVertexAttribArray(vertex_location);
-      //gl.uniform1i(gl.getUniformLocation(renderProgram, "s"), 0);
 
       var vertex_buffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
@@ -1364,48 +1159,19 @@
       gl.bufferData(gl.SHADER_STORAGE_BUFFER, arrClicked, gl.DYNAMIC_COPY);
 
 
+      var depth_texture = generateTexture(gl, gl.TEXTURE_2D, gl.R32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var volume_texture = generateTexture(gl, gl.TEXTURE_3D, gl.R32F, 1, volSize[0], volSize[1], volSize[2], gl.NEAREST, gl.NEAREST);
+      var volumeWeight_texture = generateTexture(gl, gl.TEXTURE_3D, gl.R32F, 1, volSize[0], volSize[1], volSize[2], gl.NEAREST, gl.NEAREST);
 
-      var depth_texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, depth_texture);
-	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R32F, imageSize[0], imageSize[1]);
+      var render_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8UI, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var renderGraph_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8UI, 1, 1024, 240, 1, gl.NEAREST, gl.NEAREST);
 
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      var vertex_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var normal_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
 
-      var volume_texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_3D, volume_texture);
-	    gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32F, volSize[0], volSize[1], volSize[2]);
+      var refVertex_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var refNormal_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
 
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
-
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-
-      var volumeWeight_texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_3D, volumeWeight_texture);
-	    gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32F, volSize[0], volSize[1], volSize[2]);
-
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
-
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-
-
-
-      var render_texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, render_texture);
-	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8UI, imageSize[0], imageSize[1]);
-
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 
       // Framebuffer for reading back the texture.
       var framebuffer = gl.createFramebuffer();
@@ -1413,56 +1179,12 @@
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, render_texture, 0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-      var renderGraph_texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, renderGraph_texture);
-	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8UI, 1024, 240);
-
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-
       // Framebuffer for reading back the texture.
       var framebufferGraph = gl.createFramebuffer();
       gl.bindFramebuffer(gl.FRAMEBUFFER, framebufferGraph);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, renderGraph_texture, 0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-      var vertex_texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, vertex_texture);
-	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, imageSize[0], imageSize[1]);
-
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-
-      var normal_texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, normal_texture);
-	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, imageSize[0], imageSize[1]);
-
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-
-      var refVertex_texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, refVertex_texture);
-	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, imageSize[0], imageSize[1]);
-
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-
-      var refNormal_texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, refNormal_texture);
-	    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, imageSize[0], imageSize[1]);
-
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 
       gl.vertex_buffer = vertex_buffer;
       gl.vertex_location = vertex_location;
