@@ -27,8 +27,8 @@ function render(gl, width, height) {
     gl.bindVertexArray(gl.vaoRender);
 
     let renderOpts = 0 << 0 | 
-                       0 << 1 |
-                       1 << 2 |
+                       1 << 1 |
+                       0 << 2 |
                        0 << 3 |
                        0 << 4 |
                        0 << 5;
@@ -36,11 +36,15 @@ function render(gl, width, height) {
     gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
     gl.uniform2fv(gl.getUniformLocation(renderProgram, "imageSize"), [imageSize[0] / 1, imageSize[1] / 1]);
 
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+    // gl.activeTexture(gl.TEXTURE0);
+    // gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+    // gl.activeTexture(gl.TEXTURE1);
+    // gl.bindTexture(gl.TEXTURE_2D, gl.lastColor_texture);
+    gl.bindImageTexture(0, gl.color_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
+    gl.bindImageTexture(1, gl.lastColor_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
 
-    gl.bindImageTexture(1, gl.sparseFlow_texture, 1, false, 0, gl.READ_ONLY, gl.RGBA32F);
-    gl.bindImageTexture(2, gl.densify_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+    gl.bindImageTexture(2, gl.gradient_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+    gl.bindImageTexture(3, gl.densify_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
     gl.vertexAttribPointer(gl.vertex_location, 2, gl.FLOAT, false, 0, 0);
@@ -51,8 +55,8 @@ function render(gl, width, height) {
     gl.viewport(width / 2.0, 0, width / 2.0, height);
 
     renderOpts = 0 << 0 | 
-                       1 << 1 |
-                       0 << 2 |
+                       0 << 1 |
+                       1 << 2 |
                        0 << 3 |
                        0 << 4 |
                        0 << 5;
@@ -60,11 +64,16 @@ function render(gl, width, height) {
     gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
     gl.uniform2fv(gl.getUniformLocation(renderProgram, "imageSize"), [imageSize[0] / 1, imageSize[1] / 1]);
 
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
-    
-    gl.bindImageTexture(1, gl.gradient_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-    gl.bindImageTexture(2, gl.densify_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+    // gl.activeTexture(gl.TEXTURE0);
+    // gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+    // gl.activeTexture(gl.TEXTURE1);
+    // gl.bindTexture(gl.TEXTURE_2D, gl.lastColor_texture);
+
+    gl.bindImageTexture(0, gl.color_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
+    gl.bindImageTexture(1, gl.lastColor_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
+
+    gl.bindImageTexture(2, gl.gradient_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+    gl.bindImageTexture(3, gl.densify_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
     gl.vertexAttribPointer(gl.vertex_location, 2, gl.FLOAT, false, 0, 0);
