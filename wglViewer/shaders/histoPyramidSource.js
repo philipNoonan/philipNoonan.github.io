@@ -25,6 +25,7 @@ layout(binding = 1) uniform highp sampler3D volumeFloatTexture;
 uniform int functionID;
 uniform int hpLevel;
 uniform float isoLevel;
+uniform int maxLevel;
 
 layout(std430, binding = 0) buffer outSum
 {
@@ -132,7 +133,7 @@ void constructHPLevel()
 
         imageStore(volumeHPDataOutput, ivec3(writePos), uvec4(writeValue));
 
-        if (hpLevel == 8)
+        if (hpLevel == maxLevel)
         {
             sumData.data = float(writeValue);
         }
@@ -166,6 +167,12 @@ uvec2 unpack(uint val)
     return uvec2((val & 4294901760u) >> 16, (val & 65535u));
 }
 
+float pack(vec3 data)
+{
+    highp uint uDataPacked = uint(data.x) << 20 | uint(data.y) << 10 | uint(data.z);
+    return uintBitsToFloat(uDataPacked);
+}
+
 // images
 layout(binding = 0, r32ui) uniform readonly highp uimage2D triTable;
 layout(binding = 1, r32ui) uniform readonly highp uimage2D offsets3;
@@ -179,7 +186,7 @@ layout(binding = 1) uniform highp sampler3D volumeFloatTexture;
 
 layout(std430, binding = 0) buffer posBufEncode
 {
-    vec4 posEncode [];
+    float posEncode [];
 };
 
 // layout(std430, binding = 1) buffer normBuf
@@ -344,10 +351,11 @@ void main()
         vec3 vertex = mix(vec3(point0.x, point0.y, point0.z), vec3(point1.x, point1.y, point1.z), diff); // * scaing of voxels
         vec3 normal = normalize(mix(forwardDifference0, forwardDifference1, diff));
         
-        //posEncode[target * 3u + vertexNr] = vec4(edge, cubeIndex,2.2, 1.0f);
 
-        //vertex = (vertex - scaleVec.x) / (scaleVec.y - scaleVec.x) * vec3(1023); // 1023 since we are packing using 10 bits (1024 levels)
-
+        //vertex = 1023.0f * smoothstep(0.0f, 512.0f, vertex); // 1023 since we are packing using 10 bits (1024 levels)
+        
+        //vertex = vertex * pixDims;
+        vertex = (vertex / vec3(texSize.x)) * vec3(1023.0f);
 
         // we would like to scale this so that you are not losing precision when we zoom in.
         // we need to cull verts that are outside of the viewing frustrum, therefore we need to find the viewing frustrum on the CPU then send its coords/plane eq as a uniform to the shader
@@ -355,9 +363,9 @@ void main()
         //posEncode[target * 3 + vertexNr] = uint(vertex.x) << 20 | uint(vertex.y) << 10 | uint(vertex.z);
         //if (vertex.x < 1022.0f && vertex.y < 1022.0f && vertex.z < 1022.0f && vertex.x > 1.0f && vertex.y > 1.0f && vertex.z > 1.0f)
         //{
-            posEncode[target * 3u + vertexNr] = vec4(vertex.xyz, 1.0f);//uint(vertex.x) << 20u | uint(vertex.y) << 10u | uint(vertex.z);
+         //   posEncode[target * 3u + vertexNr] = vec4(vertex.xyz, 1.0f);//uint(vertex.x) << 20u | uint(vertex.y) << 10u | uint(vertex.z);
         //    norm[target * 3u + vertexNr] = vec4(normal, 0.0f);
-
+        posEncode[target * 3u + vertexNr] = pack(vertex);
         //}
         //else
         //{

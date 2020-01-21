@@ -13,6 +13,8 @@
     <script src="third-party/nifti-reader.js"></script>
     <script src="third-party/stats.min.js"></script>
 
+    
+
     <script src="src/createAndCompileShader.js"></script>
     <script src="src/createComputeProgram.js"></script>
     <script src="src/createRenderProgram.js"></script>
@@ -30,17 +32,77 @@
     <script src="shaders/histoPyramidSource.js"></script>
 
     <script type="text/javascript">
+
+        function pow2roundup (x) {
+            if (x < 0)
+                return 0;
+            --x;
+            x |= x >> 1;
+            x |= x >> 2;
+            x |= x >> 4;
+            x |= x >> 8;
+            x |= x >> 16;
+            return x+1;
+        }
+
         function uploadVolumeData(header, imageData) {
 
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_3D, gl.textureVolume);
 
-            gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, header.dims[1], header.dims[2], header.dims[3], gl.RED, gl.FLOAT, new Float32Array(imageData));
+                        // convert raw data to typed array based on nifti datatype
+            var typedData;
+
+            if (header.datatypeCode === nifti.NIFTI1.TYPE_UINT8) {
+                typedData = new Uint8Array(imageData);
+            } else if (header.datatypeCode === nifti.NIFTI1.TYPE_INT16) {
+                typedData = new Int16Array(imageData);
+            } else if (header.datatypeCode === nifti.NIFTI1.TYPE_INT32) {
+                typedData = new Int32Array(imageData);
+            } else if (header.datatypeCode === nifti.NIFTI1.TYPE_FLOAT32) {
+                typedData = new Float32Array(imageData);
+            } else if (header.datatypeCode === nifti.NIFTI1.TYPE_FLOAT64) {
+                //typedData = new Float64Array(imageData);
+                console.log("Currently dont support double types")
+            } else if (header.datatypeCode === nifti.NIFTI1.TYPE_INT8) {
+                typedData = new Int8Array(imageData);
+            } else if (header.datatypeCode === nifti.NIFTI1.TYPE_UINT16) {
+                typedData = new Uint16Array(imageData);
+            } else if (header.datatypeCode === nifti.NIFTI1.TYPE_UINT32) {
+                typedData = new Uint32Array(imageData);
+            } else {
+                return;
+            }
+
+            var uploadImageData = Float32Array.from(typedData);
+            
+
+            gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, header.dims[1], header.dims[2], header.dims[3], gl.RED, gl.FLOAT, uploadImageData);
 
             gl.generateMipmap(gl.TEXTURE_3D);
 
+        }
+
+        function initializeTextures(header) {
+
+            let volSize = pow2roundup(Math.max(header.dims[1], header.dims[2], header.dims[3]));
+            let numberOfLevels = Math.log2(volSize) + 1;
+            var textureVolume = generateTexture(gl, gl.TEXTURE_3D, gl.R32F, 1, volSize, volSize, volSize, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
+            var textureHistoPyramid = generateTexture(gl, gl.TEXTURE_3D, gl.R32UI, numberOfLevels, volSize, volSize, volSize, gl.NEAREST, gl.NEAREST_MIPMAP_NEAREST);
+
+            gl.pixDims = [header.pixDims[1], header.pixDims[2], header.pixDims[3]];
+            gl.textureVolume = textureVolume;
+            gl.textureHistoPyramid = textureHistoPyramid;
+            gl.size = volSize;
+            gl.numberOfLevels = numberOfLevels;
+
 
         }
+
+        function initializeBuffers(header) {
+
+        }
+
         function readNIFTI(name, buf) {
             var data = nifti.Utils.toArrayBuffer(buf);
 
@@ -51,8 +113,14 @@
             var header = nifti.readHeader(buf);
 
             var imageData = nifti.readImage(header, buf);
+
+            initializeTextures(header);
+
+            //initializeBuffers(header);
             
             uploadVolumeData(header, imageData);
+
+            gl.volumeLoaded = true;
 
             //var logger = document.getElementById('results');
             //logger.innerText = header.toFormattedString();
@@ -88,35 +156,69 @@
             var files = evt.target.files;
             readFile(files[0]);
         }
+
+        function loadDemoFile() {
+
+        }
     </script>
 
 </head>
 
 <body>
 
+    <div id="page">
 
-    <div id="select" style="font-family:sans-serif">
-        <p>Select a file: <input type="file" id="file" name="files" /></p>
-        <hr />
+        <div>
+            <canvas id="canvasGL"></canvas>
+        </div>
+        <div class="clear"></div>
+
+        <div id = "controls">
+            <div id="select" style="font-family:sans-serif">
+                <p>Select a file: </p>
+                <input type="file" id="file" name="files" />
+                
+                <!--<p>Or load demo file: </p>
+                <button onclick="loadDemoFile()"></button>
+                -->
+                <script type="text/javascript">
+                    document.getElementById('file').addEventListener('change', handleFileSelect, false);
+                </script>
+            
+
+
+                <div id="sliders" class="slidecontainer">
+                    <p>level: <span id="isoLevelText"></span></p>
+                    <input type="range" min="0.0" max="5000" step="10" value="1000" class="slider" id="isoLevelSlider">
+                    <p>X: <span id="xText"></span></p>
+                    <input type="range" min="0.0" max="512" step="1" value="0" class="slider" id="xSlider">
+                    <p>Y: <span id="yText"></span></p>
+                    <input type="range" min="0.0" max="512" step="1" value="0" class="slider" id="ySlider">
+                    <p>Z: <span id="zText"></span></p>
+                    <input type="range" min="0.0" max="512" step="1" value="0" class="slider" id="zSlider">
+                    <p>Color: <span id="colorText"></span></p>
+                    <input type="range" min="0.0" max="0.01" step="0.00001" value="0.00005" class="slider" id="colorScaleSlider">
+                </div>
+
+                <div id="renderOpt">
+                    <p>Render Ortho: <input type="checkbox" id="renderOrtho"></p>
+                    <p>Render Surf: <input type="checkbox" id="renderMarchingCubes" checked=true></p>
+
+                </div>
+
+            </div>
+        </div>
+
+
+
     </div>
-
-
-    <script type="text/javascript">
-        document.getElementById('file').addEventListener('change', handleFileSelect, false);
-    </script>
-
-<div class="slidecontainer">
-    <p>level: <span id="isoLevelText"></span></p>
-    <input type="range" min="0.0" max="5000" step="10" value="1000" class="slider" id="isoLevelSlider">
-  </div>
-
 
 
     <script>
 
         var gl;
 
-        function divup(a, b) { return (a % b != 0) ? (a / b + 1) : (a / b); }
+        function divup(a, b) { return (a % b != 0) ? Math.ceil(a / b) : (a / b); }
 
         var stats = new Stats();
         stats.showPanel(0);
@@ -127,16 +229,51 @@
     (function() {
         'use strict';
 
-        var sliderIsoLevel = document.getElementById("isoLevelSlider");
-        var textIsoLevel = document.getElementById("isoLevelText");
-        var threshChanged = 1;
+    var sliderIsoLevel = document.getElementById("isoLevelSlider");
+    var textIsoLevel = document.getElementById("isoLevelText");
+    var threshChanged = 1;
 
-  sliderIsoLevel.oninput = function() {
+    sliderIsoLevel.oninput = function() {
     textIsoLevel.innerHTML = this.value;
     threshChanged = 1 - threshChanged;
-  }
+    }
 
-        var canvas = document.createElement('canvas');
+    var renderOrthoFlag = document.getElementById("renderOrtho");
+    var renderMCFlag = document.getElementById("renderMarchingCubes");
+
+
+    var sliderX = document.getElementById("xSlider");
+    var textX = document.getElementById("xText");
+
+    sliderX.oninput = function() {
+        textX.innerHTML = this.value;
+    }
+
+ 
+
+    var sliderY = document.getElementById("ySlider");
+    var textY = document.getElementById("yText");
+
+    sliderY.oninput = function() {
+        textY.innerHTML = this.value;
+    }
+
+    var sliderColorScale = document.getElementById("colorScaleSlider");
+    var textColor = document.getElementById("colorText");
+
+    sliderColorScale.oninput = function() {
+        textColor.innerHTML = this.value;
+    }
+
+ 
+    var sliderZ = document.getElementById("zSlider");
+    var textZ = document.getElementById("zText");
+
+    sliderZ.oninput = function() {
+        textZ.innerHTML = this.value;
+    }
+
+        var canvas = document.getElementById("canvasGL");
         canvas.width = Math.min(window.innerWidth, window.innerHeight);
         canvas.height = canvas.width;
         document.body.appendChild(canvas);
@@ -172,21 +309,84 @@
             MAX: 4
         };
 
+        var zoom = 1;
+
         var viewport = new Array(1);
 
+        var mousePos = [0, 0];
+        var rotation = [0, 0];
+        var cameraPos = [0, 0];
+
+        var dragging = false;
         viewport = {
             x: 0,
             y: 0,
             z: windowSize.x,
             w: windowSize.y
         };
+       
+        function zoomCall(event) {
+            event.preventDefault();
+            gl.zoom += event.deltaY * 0.01;
+        }
+
+        function mouseDownCall(event) {
+            dragging = true;
+        }
+        function mouseUpCall(event) {
+            dragging = false;
+            mousePos = [0, 0];
+        }
 
 
-        var SIZE = 512;
-        var numberofLevels = 10;
+        function mouseMoveCall(event) {
+            if (dragging) {
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
 
-        var textureVolume = generateTexture(gl, gl.TEXTURE_3D, gl.R32F, 1, SIZE, SIZE, SIZE, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
-        var textureHistoPyramid = generateTexture(gl, gl.TEXTURE_3D, gl.R32UI, 10, SIZE, SIZE, SIZE, gl.NEAREST, gl.NEAREST_MIPMAP_NEAREST);
+                if (typeof event === 'object') {
+                    switch (event.which) {
+                    case 1:
+                        if (mousePos[0] != 0.0)
+                        {
+                            rotation[0] -= ((mousePos[0] - x) * 0.01);
+                            rotation[1] -= ((mousePos[1] - y) * 0.01);
+                        }
+                        mousePos = [x, y];
+                        break;
+                    case 3:
+                    if (mousePos[0] != 0.0)
+                        {
+                            cameraPos[0] -= ((mousePos[0] - x) * 0.01);
+                            cameraPos[1] += ((mousePos[1] - y) * 0.01);
+                        }
+                        mousePos = [x, y];
+                        break;
+                    case 2:
+                        break;
+                    default:
+                        //console.log(`Unknown button code: ${event.button}`);
+                    }
+                }       
+            }
+
+           
+        }
+
+        canvas.addEventListener('wheel', zoomCall);
+        canvas.addEventListener('mousedown', mouseDownCall);
+        canvas.addEventListener('mousemove', mouseMoveCall);
+        canvas.addEventListener('mouseup', mouseUpCall);
+        canvas.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+
+
+        var volumeLoaded = false;
+
 
         var textureTriTable = generateTexture(gl, gl.TEXTURE_2D, gl.R32UI, 1, 256 * 16, 1, 1, gl.NEAREST, gl.NEAREST);
         var textureNrTriangles = generateTexture(gl, gl.TEXTURE_2D, gl.R32UI, 1, 256, 1, 1, gl.NEAREST, gl.NEAREST);
@@ -339,15 +539,15 @@
         gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboHPSum);
         gl.bufferData(gl.SHADER_STORAGE_BUFFER, sumOutput, gl.DYNAMIC_COPY);
 
-        let hpVerts = new Float32Array(512*512*512*2); // some large number that we hope will fit in all the verts
+        let hpVerts = new Float32Array(512*512*128); 
         var ssboHPVerts = gl.createBuffer();
         gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboHPVerts);
-        gl.bufferData(gl.SHADER_STORAGE_BUFFER, hpVerts, gl.DYNAMIC_COPY, 0, 512*512*512*2);
+        gl.bufferData(gl.SHADER_STORAGE_BUFFER, hpVerts, gl.DYNAMIC_COPY, 0, 512*512*128);
 
-        let hpNorms = new Float32Array(512*512*512*2); // some large number that we hope will fit in all the norms
-        var ssboHPNorms = gl.createBuffer();
-        gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboHPNorms);
-        gl.bufferData(gl.SHADER_STORAGE_BUFFER, hpNorms, gl.DYNAMIC_COPY, 0, 512*512*512*2);
+        //let hpNorms = new Float32Array(512*512*512); 
+        //var ssboHPNorms = gl.createBuffer();
+        //gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboHPNorms);
+        //gl.bufferData(gl.SHADER_STORAGE_BUFFER, hpNorms, gl.DYNAMIC_COPY, 0, 512*512*512);
 
          var vaoMarchingCubes = gl.createVertexArray();
 
@@ -355,22 +555,31 @@
         var vertLoc = 0;
         gl.enableVertexAttribArray(vertLoc);
         gl.bindBuffer(gl.ARRAY_BUFFER, ssboHPVerts);
-        gl.vertexAttribPointer(vertLoc, 4, gl.FLOAT, false, 0, 0);
-        var normLoc = 1;
-        gl.enableVertexAttribArray(normLoc);
-        gl.bindBuffer(gl.ARRAY_BUFFER, ssboHPNorms);
-        gl.vertexAttribPointer(normLoc, 4, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribPointer(vertLoc, 1, gl.FLOAT, false, 0, 0);
+        //var normLoc = 1;
+        //gl.enableVertexAttribArray(normLoc);
+       // gl.bindBuffer(gl.ARRAY_BUFFER, ssboHPNorms);
+        //gl.vertexAttribPointer(normLoc, 4, gl.FLOAT, false, 0, 0);
 
          gl.bindVertexArray(null);
 
 
         var totalSumVerts = 0;
+        var totalSumTrianglesToRender = 0;
 
         // -- Render
 
         var orientation = [0.0, 0.0, 0.0];
+        var planeVals = [0.0, 0.0, 0.0];
+
+
+        gl.volumeLoaded = volumeLoaded;
 
         gl.sliderIsoLevel = sliderIsoLevel;
+        gl.sliderX = sliderX;
+        gl.sliderY = sliderY;
+        gl.sliderZ = sliderZ;
+        gl.colorScale = sliderColorScale;
 
         gl.renderProgram = renderProgram;
         gl.vertexPosBuffer = vertexPosBuffer;
@@ -381,8 +590,7 @@
 
         gl.mcRenderProgram = mcRenderProgram;
 
-        gl.textureVolume = textureVolume;
-        gl.textureHistoPyramid = textureHistoPyramid;
+
 
         gl.textureTriTable = textureTriTable;
         gl.textureNrTriangles = textureNrTriangles;
@@ -396,19 +604,28 @@
 
 
         gl.orientation = orientation;
+        gl.planeVals = planeVals;
         gl.uniformDiffuseLocation = uniformDiffuseLocation;
         gl.uniformTextureModelViewLocation = uniformTextureModelViewLocation;
         gl.uniformTextureProjectionLocation = uniformTextureProjectionLocation;
         gl.uniformTextureMatrixLocation = uniformTextureMatrixLocation;
-        gl.size = SIZE;
         gl.orientation = orientation;
         gl.vp = viewport;
 
         gl.ssboHPSum = ssboHPSum;
         gl.totalSumVerts = totalSumVerts;
+        gl.totalSumTrianglesToRender = totalSumTrianglesToRender;
         
         gl.ssboHPVerts = ssboHPVerts;
-        gl.ssboHPNorms = ssboHPNorms;
+        //gl.ssboHPNorms = ssboHPNorms;
+
+        gl.zoom = zoom;
+        gl.rotation = rotation;
+        gl.cameraPos = cameraPos;
+
+        gl.renderOrtho = renderOrthoFlag;
+        gl.renderMC = renderMCFlag;
+
 
         requestAnimationFrame(frameLoop);
 
@@ -419,16 +636,20 @@ function frameLoop() {
 
     stats.begin();
     
-    if (threshChanged == 1)
+    if (gl.volumeLoaded)
     {
-        classifyCubes(gl);
-        constructHistoPyramid(gl);
-        traverseHistoPyramid(gl);
-        threshChanged = 0;
-    }
+        if (threshChanged == 1)
+        {
+            classifyCubes(gl);
+            constructHistoPyramid(gl);
+            traverseHistoPyramid(gl);
+            threshChanged = 0;
+        }
 
-    render(gl);
+        render(gl);
+    }
     stats.end();
+
 
     requestAnimationFrame(frameLoop);
 }

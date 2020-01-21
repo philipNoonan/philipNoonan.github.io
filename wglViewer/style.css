@@ -1,32 +1,36 @@
-body {
-    color: #cccccc;
-    font-family: Monospace;
-    font-size: 13px;
-    text-align: center;
-    background-color: #050505;
-    margin: 0px;
-    overflow: hidden;
+
+#page {
+    margin-left: 15%;
 }
 
-#info {
-    position: absolute;
-    top: 0px;
-    width: 100%;
-    padding: 5px;
-}
 
-#description {
-    position: absolute;
-    top: 20px;
-    width: 100%;
-    padding: 5px;
-}
-
-.float {
+canvas {
     float: left;
-    top: 10px;
+    width: 960px;
+    height: 960px;
+    margin-left: 15%;
+
+    border: 1px solid #cccccd;
+    background-color: grey;
+  }
+
+#controls {
+    float: left;
+    width: 15%;
+    margin-left: -15%;
+
 }
 
-a {
-    color: #0080ff;
+#sliders {
+    margin-top: 50px
 }
+
+#renderOpt {
+    margin-top: 50px
+}
+
+.slidecontainer {
+    width: 50%;
+  }
+
+.clear { clear:both; }

@@ -16,11 +16,12 @@ const vertexShaderSource = `#version 310 es
         uniform mat4 orientation;
         uniform mat4 proj;
         uniform mat4 MV;
+        uniform vec3 pixDims;
 
         void main()
         {
         v_texcoord = in_texcoord.xyz;
-        gl_Position = proj * MV * vec4(position.x * 10.0, position.y*10.0, position.z*10.0, 1.0);
+        gl_Position = proj * MV * vec4(position.xyz * pixDims, 1.0);
         }
 
 `
@@ -34,14 +35,29 @@ const fragmentShaderSource = `#version 310 es
 
         layout(binding = 0) uniform highp sampler3D volumeData;
 
+        uniform float colorScale;
+
         in vec3 v_texcoord;
 
         out vec4 color;
 
+        uvec2 unpack(uint val)
+        {
+            return uvec2((val & 4294901760u) >> 16, (val & 65535u));
+        }
+
         void main()
         {
+            //uint data = textureLod(volumeData, v_texcoord, 8.0f).x;
+            //color = vec4(data * 1000u, 0, 0, 1);
+
             color = texture(volumeData, v_texcoord);
-            color.xyz *= 0.001f;
+            if (color.x < 0.0001f)
+            {
+                discard;
+                color.w = 0.0f;
+            }
+            color.xyz *= colorScale;
         }
 `
 ;
