@@ -29,13 +29,13 @@ uniform int maxLevel;
 
 layout(std430, binding = 0) buffer outSum
 {
-  float data;
+  highp uint data;
 } sumData;
 
 
-uvec2 unpack(uint val)
+uvec2 unpack(highp uint val)
 {
-    return uvec2((val & 4294901760u) >> 16, (val & 65535u));
+    return uvec2((val & 4294901760u) >> 16u, (val & 65535u));
 }
 
 const ivec4 cubeOffsets[8] = ivec4[8](
@@ -91,8 +91,6 @@ void constructHPLevel()
 
     imSize = imageSize(volumeHPDataOutput);
     
-    vec3 texSize = vec3(textureSize(histoPyramidTexture, hpLevel));
-
     if (writePos.x > float(imSize.x * 2) || writePos.y > float(imSize.y * 2) || writePos.z > float(imSize.z * 2))
     {
         return;
@@ -135,7 +133,10 @@ void constructHPLevel()
 
         if (hpLevel == maxLevel)
         {
-            sumData.data = float(writeValue);
+            if (writeValue > 0u) // i think this is needed to stop the other invocations from overwriting the valid output, woudl it be better to check before this point???
+            {
+                sumData.data = writeValue;
+            }
         }
     
 }
@@ -160,7 +161,7 @@ void main()
 `;
 
 const traverseHistoPyramidSource = `#version 310 es
-layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
 
 uvec2 unpack(uint val)
 {

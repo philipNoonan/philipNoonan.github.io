@@ -98,23 +98,33 @@ gl.uniform1i(gl.getUniformLocation(gl.renderProgram, 'volumeData'), 0);
 gl.activeTexture(gl.TEXTURE0);
 gl.bindTexture(gl.TEXTURE_3D, gl.textureVolume);
 
-var translate = vec3.create();
-vec3.set(translate, gl.cameraPos[0], gl.cameraPos[1], -gl.zoom);
-var modelView = mat4.create();
-mat4.translate(modelView, modelView, translate);
-mat4.rotateX(modelView, modelView, gl.orientation[1]);
+var translateModel = vec3.create();
+var translateView = vec3.create();
 
+//vec3.set(translateModel, (gl.size / gl.ogSize[0]) / 3.0, (gl.size / gl.ogSize[1]) / 3.0, (gl.size / gl.ogSize[2]) / 3.0); //make offset to centre of og volume in units of -1 -> 1
+vec3.set(translateModel, 0, 0, (512.0 - gl.ogSize[2]) / 256.0); //make offset to centre of og volume in units of -1 -> 1
 
+vec3.set(translateView, gl.cameraPos[0], gl.cameraPos[1], -gl.zoom);
+var model = mat4.create();
+var view = mat4.create();
 
-mat4.rotateY(modelView, modelView, gl.orientation[0]);
+mat4.translate(model, model, translateModel);
+
+mat4.translate(view, view, translateView);
+
+mat4.rotateX(view, view, gl.orientation[1]);
+mat4.rotateY(view, view, gl.orientation[0]);
 
 var perspective = mat4.create();
 
 mat4.perspective(perspective, 45 * Math.PI / 180, gl.canvas.clientWidth / gl.canvas.clientHeight, .01, 1000);
 
+var MV = mat4.create();
 var MVP = mat4.create();
 
-mat4.multiply(MVP, perspective, modelView);
+mat4.multiply(MV, view, model);
+
+mat4.multiply(MVP, perspective, MV);
 
 gl.bindVertexArray(gl.vertexArray);
 
@@ -125,10 +135,11 @@ gl.bindVertexArray(gl.vertexArray);
 // gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.indicesBuffer);
 
 gl.viewport(gl.vp.x, gl.vp.y, gl.vp.z, gl.vp.w);
-gl.uniformMatrix4fv(gl.getUniformLocation(gl.renderProgram, 'MV'), false, modelView);
-gl.uniformMatrix4fv(gl.getUniformLocation(gl.renderProgram, 'proj'), false, perspective);
+gl.uniformMatrix4fv(gl.getUniformLocation(gl.renderProgram, 'MVP'), false, MVP);
 gl.uniformMatrix4fv(gl.getUniformLocation(gl.renderProgram, 'orientation'), false, matrices[0]);
 gl.uniform3fv(gl.getUniformLocation(gl.renderProgram, "pixDims"), gl.pixDims);
+gl.uniform3fv(gl.getUniformLocation(gl.renderProgram, "volRatio"), [gl.size / gl.ogSize[0], gl.size / gl.ogSize[1], gl.size / gl.ogSize[2]]);
+
 gl.uniform1f(gl.getUniformLocation(gl.renderProgram, "colorScale"), gl.colorScale.value);
 
 if (gl.renderOrtho.checked == true)
@@ -152,6 +163,7 @@ gl.uniformMatrix4fv(gl.getUniformLocation(gl.mcRenderProgram, 'MVP'), false, MVP
 gl.uniform1f(gl.getUniformLocation(gl.mcRenderProgram, 'MCScaleFactor'), 0.25);
 gl.uniform1i(gl.getUniformLocation(gl.mcRenderProgram, 'volumeData'), 0);
 gl.uniform3fv(gl.getUniformLocation(gl.mcRenderProgram, "pixDims"), gl.pixDims);
+gl.uniform3fv(gl.getUniformLocation(gl.mcRenderProgram, "volRatio"), [gl.size / gl.ogSize[0], gl.size / gl.ogSize[1], gl.size / gl.ogSize[2]]);
 
 gl.activeTexture(gl.TEXTURE0);
 gl.bindTexture(gl.TEXTURE_3D, gl.textureHistoPyramid);

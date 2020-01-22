@@ -14,14 +14,14 @@ const vertexShaderSource = `#version 310 es
 
         // Matrix to transform the texture coordinates into 3D space
         uniform mat4 orientation;
-        uniform mat4 proj;
-        uniform mat4 MV;
+        uniform mat4 MVP;
         uniform vec3 pixDims;
+        uniform vec3 volRatio;
 
         void main()
         {
-        v_texcoord = in_texcoord.xyz;
-        gl_Position = proj * MV * vec4(position.xyz * pixDims, 1.0);
+            v_texcoord = in_texcoord.xyz;
+            gl_Position = MVP * vec4(position.xyz * pixDims, 1.0);
         }
 
 `

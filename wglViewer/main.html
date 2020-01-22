@@ -85,6 +85,7 @@
 
         function initializeTextures(header) {
 
+            let ogVolSize = [header.dims[1], header.dims[2], header.dims[3]];
             let volSize = pow2roundup(Math.max(header.dims[1], header.dims[2], header.dims[3]));
             let numberOfLevels = Math.log2(volSize) + 1;
             var textureVolume = generateTexture(gl, gl.TEXTURE_3D, gl.R32F, 1, volSize, volSize, volSize, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
@@ -94,8 +95,8 @@
             gl.textureVolume = textureVolume;
             gl.textureHistoPyramid = textureHistoPyramid;
             gl.size = volSize;
+            gl.ogSize = ogVolSize;
             gl.numberOfLevels = numberOfLevels;
-
 
         }
 
@@ -157,14 +158,24 @@
             readFile(files[0]);
         }
 
-        function loadDemoFile() {
 
-        }
+
     </script>
 
 </head>
 
 <body>
+
+    <div id="no-support" style="display: none">
+        <p><mark class="secondary" style="margin-right: 0.5em"></mark> It seems like WebGL 2.0 Compute is not available on your browser. Make sure you are on a system with WebGL 2.0 Compute enabled.</p>
+        <p>Have you tried to open your browser using these arguments ?</p>
+        <p>Windows: </p>
+        <pre>chrome.exe --use-cmd-decoder=passthrough --use-angle=gl --enable-webgl2-compute-context</pre>
+        <p>Linux - USE CHROME DEV: </p>
+        <pre>google-chrome-unstable --use-gl=angle --use-angle=gl --use-cmd-decoder=passthrough --enable-webgl2-compute-context</pre>
+    </div>
+
+    <div class="clear"></div>
 
     <div id="page">
 
@@ -177,10 +188,7 @@
             <div id="select" style="font-family:sans-serif">
                 <p>Select a file: </p>
                 <input type="file" id="file" name="files" />
-                
-                <!--<p>Or load demo file: </p>
-                <button onclick="loadDemoFile()"></button>
-                -->
+            
                 <script type="text/javascript">
                     document.getElementById('file').addEventListener('change', handleFileSelect, false);
                 </script>
@@ -279,6 +287,12 @@
         document.body.appendChild(canvas);
 
         gl = canvas.getContext( 'webgl2-compute', { antialias: false } );
+        if (!gl) {
+            
+            document.getElementById("no-support").style.display = 'block';
+            return;
+        }
+
         var isWebGL2 = !!gl;
         if(!isWebGL2) {
             document.getElementById('info').innerHTML = 'webgl2 implementation of histopyramids</a>';
@@ -534,15 +548,15 @@
 
 
 
-        let sumOutput = new Float32Array(1);
+        let sumOutput = new Uint32Array(1);
         var ssboHPSum = gl.createBuffer();
         gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboHPSum);
         gl.bufferData(gl.SHADER_STORAGE_BUFFER, sumOutput, gl.DYNAMIC_COPY);
 
-        let hpVerts = new Float32Array(512*512*128); 
+        let hpVerts = new Float32Array(512*512*256); 
         var ssboHPVerts = gl.createBuffer();
         gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboHPVerts);
-        gl.bufferData(gl.SHADER_STORAGE_BUFFER, hpVerts, gl.DYNAMIC_COPY, 0, 512*512*128);
+        gl.bufferData(gl.SHADER_STORAGE_BUFFER, hpVerts, gl.DYNAMIC_COPY, 0, 512*512*256);
 
         //let hpNorms = new Float32Array(512*512*512); 
         //var ssboHPNorms = gl.createBuffer();
@@ -572,6 +586,7 @@
         var orientation = [0.0, 0.0, 0.0];
         var planeVals = [0.0, 0.0, 0.0];
 
+        gl.blankCounter = 0;
 
         gl.volumeLoaded = volumeLoaded;
 
@@ -644,7 +659,7 @@ function frameLoop() {
             constructHistoPyramid(gl);
             traverseHistoPyramid(gl);
             threshChanged = 0;
-        }
+       }
 
         render(gl);
     }
