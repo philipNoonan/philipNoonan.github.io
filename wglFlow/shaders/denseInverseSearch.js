@@ -97,7 +97,7 @@ void main()
 
 	float meanDiff, firstMeanDiff;
 
-	for (int iter = 0; iter < 8; iter++)
+	for (int iter = 0; iter < int(level + 2.0f); iter++)
 	{
 		vec2 du = vec2(0.0f);
 		float warpedSum = 0.0f;

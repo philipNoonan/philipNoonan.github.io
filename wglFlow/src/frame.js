@@ -25,6 +25,30 @@ function copyImage(gl, target, source, level, width, height, format) {
 }
 
 
+function checkIfNewImage(gl, lastImage, nextImage)
+{
+  gl.useProgram(checkIfNewImageProgram);
+
+  gl.bindImageTexture(0, lastImage, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
+  gl.bindImageTexture(1, nextImage, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
+
+  gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboCheckData);
+
+  gl.dispatchCompute(1, 1, 1);
+  gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+  const outputCheckData = new Uint32Array(1);
+  gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboCheckData);
+  gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, outputCheckData);
+  gl.memoryBarrier(gl.ALL_BARRIER_BITS);
+
+  gl.newImage = outputCheckData == 0 ? 0 : 1;
+  //console.log(outputCheckData);
+
+  
+}
+
+
 function calcGradient(gl, level, width, height) {
 
 
@@ -125,8 +149,45 @@ function densify(gl, level, width, height) {
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-  gl.enable(gl.DEPTH_TEST);
-  gl.disable(gl.BLEND);
+  gl.disable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
+
+}
+
+
+function getFlowFromPart(gl, maskTex) {
+  gl.useProgram(getFlowFromPartProgram);
+
+  // using body-pix supplied list of ID pixels indicating chest area
+  gl.bindImageTexture(0, gl.densify_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+  gl.bindImageTexture(1, maskTex, 0, false, 0, gl.READ_ONLY, gl.R32I);
+
+  // loop for each person detected?
+
+  gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboChestFlowData);
+
+
+  gl.dispatchCompute(16, 1, 1);
+  gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+
+
+  const outputChestFlowData = new Float32Array(16 * 2);
+  gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboChestFlowData);
+  gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, outputChestFlowData);
+  gl.memoryBarrier(gl.ALL_BARRIER_BITS);
+
+  let flowX = 0;
+  let flowY = 0;
+  for (let i = 0; i < 32; i += 2) {
+    flowX += outputChestFlowData[i];
+    flowY += outputChestFlowData[i + 1];
+  }
+
+
+
+  return [flowX, flowY];
 
 }
