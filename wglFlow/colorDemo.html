@@ -19,7 +19,7 @@
     max-width: 400px;
   }
 
-  select {
+  /* select {
     background-color: transparent;
     width: 100%;
     padding: 4px 0;
@@ -27,7 +27,7 @@
     color: rgba(0,0,0, 0.26);
     border: none;
     border-bottom: 1px solid rgba(0,0,0, 0.12);
-  }
+  } */
 
   select:focus {
     outline: none;
@@ -157,10 +157,7 @@
       display: block;
     }
   </style>
-  <div>
-    <label>WebGL2.0-Compute Powered Optical Flow: wglFlow:</label>
-    <canvas id="canvasGL" width="1696" height="960"></canvas>
-  </div>
+
 </template>
 
 <body onload="onLoad()">
@@ -172,7 +169,7 @@
     <pre>chrome.exe --use-cmd-decoder=passthrough --use-angle=gl --enable-webgl2-compute-context</pre>
     <p>Linux - USE CHROME DEV: </p>
     <pre>google-chrome-unstable --use-gl=angle --use-angle=gl --use-cmd-decoder=passthrough --enable-webgl2-compute-context</pre>
-</div>
+  </div>
 
   <h2>wglFlow</h2>
   <div id="console">
@@ -184,15 +181,22 @@
   </div>
 
   <!-- <button onclick="clickPoseNet()">Load PoseNet</button> -->
-  <button onclick="clickBodyPix()">Load BodyPix</button>
+  <!-- <button onclick="clickBodyPix()">Load BodyPix</button> -->
+
+  <input id="myInput" type="file" accept="video/*" style="visibility:hidden" />
 
 
-  <div id="tabcontainer">
-    <input id="tab1" type="radio" name="tabs" value="basic" checked="checked" data-ontaboff="stopBasicTab" data-ontabon="startBasicTab"/>
-    <div id="tabcontent">
-      <div id = tabcontent1>
+  <!-- <div id="tabcontainer"> -->
+    <!-- <input id="tab1" type="radio" name="tabs" value="basic" checked="checked" data-ontaboff="stopBasicTab" data-ontabon="startBasicTab"/> -->
+    <!-- <div id="tabcontent"> -->
+      <!-- <div id = tabcontent1>
         <video-stream></video-stream>
-      </div>
+      </div> -->
+    <!-- </div> -->
+
+  <div>
+    <!-- <label>WebGL2.0-Compute Powered Optical Flow: wglFlow:</label> -->
+    <canvas id="canvasGL" width="1696" height="960"></canvas>
   </div>
 
   <!-- <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script> -->
@@ -200,6 +204,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.2"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.0"></script>
+
+  <script type="text/javascript" src="node_modules/dat.gui/build/dat.gui.min.js"></script>
 
 
 
@@ -299,9 +305,9 @@
 
   async function loadBodyPix() {
     net = await bodyPix.load({
-      architecture: 'MobileNetV1',
+      architecture: 'ResNet50',
       outputStride: 16,
-      multiplier: 0.75,
+      multiplier: 1.0,
       quantBytes: 2
     });
     bodyPixLoaded = 1;
@@ -309,10 +315,15 @@
   }
 
   async function getBodyMap(image, net) {
-    const seggy = await net.segmentPersonParts(image, {
+    const seggy = await net.segmentMultiPersonParts(image, {
       flipHorizontal: false,
       internalResolution: 'medium',
-      segmentationThreshold: 0.7
+      segmentationThreshold: 0.7,
+      maxDetections: 10,
+      scoreThreshold: 0.2,
+      nmsRadius: 20,
+      minKeypointScore: 0.3,
+      refineSteps: 10
     });
     segmentation = seggy;
     bodyMapFound = 1;
@@ -326,6 +337,8 @@
 
   let tabs = document.getElementsByName("tabs");
   let videos = {depth: null, color: null};
+  var videoFF;
+  var videoLoaded = 0;
 
   let selectedtab = tabs[0];
   for(let i = 0; i < tabs.length; i++) {
@@ -356,11 +369,77 @@
 
 
   var frameCounter = 0;
+  var runningSum = 0;
+  var runningMin = -5000;
+  var runningMax = 5000;
+  var plottingPoints = [];
 
   var stats = new Stats();
   stats.showPanel(0);
-  stats.domElement.style.cssText = 'position:absolute;top:0px;right:0px;';
+  stats.domElement.style.cssText = 'position:absolute;top:0px;left:0px;';
   document.body.appendChild(stats.dom);
+
+
+  var paramGUI = function() {
+    this.speed = 10;
+    this.checkForNewFrames = true;
+    this.useWebcam = function() {
+      connectedCallback();
+      loadWebcam()
+    };
+    this.loadBP = function() {loadBodyPix()};
+    this.loadFile = function() { 
+      document.querySelector('input').addEventListener('change', extractFrames, false);
+      document.getElementById('myInput').click();
+    }
+    this.resolution = '640x480';
+  };
+
+  var spd = 10;
+  var checkFramesFlag = true;
+
+  var gui = new dat.GUI();
+  var param = new paramGUI();
+  gui.open();
+
+  var spdcont = gui.add(param, 'speed', 1, 20);
+  var checkFrames = gui.add(param, 'checkForNewFrames');
+  gui.add(param, 'useWebcam').name('Use Webcam');
+  gui.add(param, 'loadBP').name('Load BodyPix');
+  gui.add(param, 'loadFile').name('Load video file');
+  var checkReso = gui.add(param, 'resolution', ['1920x1080', '1280x720', '640x480']);
+
+  spdcont.onChange(function(value) {
+    spd = value;
+    //console.log(spd);
+  });
+
+  checkFrames.onChange(function(value) {
+    checkFramesFlag = value;
+  });
+
+  checkReso.onChange(function(value) {
+    frameAvailableColor = false;
+    switch(value) {
+      case '1920x1080':
+        imageSize = [1920, 1080];
+        setTextures(gl);
+        loadWebcam();
+        break;
+      case '1280x720':
+        imageSize = [1280, 720];
+        setTextures(gl);
+        loadWebcam();
+        break;
+      case '640x480':
+        imageSize = [640, 480];
+        setTextures(gl);
+        loadWebcam();
+        break;
+      default:
+        break;
+      };
+  });
 
   // vao
   var vaoRender;
@@ -371,12 +450,15 @@
   var renderPlottingProgram;
   var renderSkeletonProgram;
   var skelePoints = [];
+  var skeleLines = [];
 
   var newImage = 1;
+  var frameAvailableColor = false;
 
   var plottingBufferProgram;
 
   var copyImageProgram;
+  var genMipMapProgram;
   var checkIfNewImageProgram;
   var edgeDetectProgram;
   var disSearchProgram;
@@ -384,36 +466,83 @@
 
   var disDensificationProgram;
 
-  var imageSize = [1280, 720];
-  var numberOflevels = 4;
+  var imageSize = [640, 480];
+  var numberOflevels = 6;
+
+  var gl;
+
+
+
+
 
   function normalize(val, max, min) { return (val - min) / (max - min); }
 	function divup(a, b) { return (a % b != 0) ? (a / b + 1) : (a / b); }
 
 
+  function extractFrames() {
+    videoFF = document.createElement('video');
 
-  customElements.define('video-stream', class extends HTMLElement {
-    constructor() {
-      super();
-      const template = document.querySelector('#video-stream');
-      const clone = document.importNode(template.content, true);
-      const shadowRoot = this.attachShadow({ mode: 'open' });
-      this.shadowRoot.appendChild(clone);
+    function initCanvas(e) {
+      //console.log(this.videoWidth)
+      //videoLoaded = 1;
+      videoFF.width = videoFF.videoWidth;
+      videoFF.height = videoFF.videoHeight;
+      imageSize = [videoFF.width, videoFF.height];
+      setTextures(gl);
 
-      this._frameLoop = this._frameLoop.bind(this);
-
-      this.readBuffer = null;
-      this.readFormat = null;
     }
 
+    function drawFrame(e) {
+      // this.pause();
 
-    connectedCallback() {
-      this.gl = this._configureGLContext();
+      // if (this.currentTime < this.duration) {
+      // this.play();
+      //console.log(this.currentTime);
+      //}
+    }
 
-      this.frameAvailableColor = false;
+    function loadedData(e) {
+      videoLoaded = 1;
+    }
+
+    videoFF.addEventListener('loadedmetadata', initCanvas, false);
+    videoFF.addEventListener('loadeddata', loadedData, false);
+    videoFF.addEventListener('timeupdate', drawFrame, false);
+    videoFF.addEventListener("play", _frameLoop);
+
+
+    videoFF.src = URL.createObjectURL(this.files[0]);
+    videoFF.muted = true;
+    videoFF.preload = 'auto';
+    videoFF.loop = true;
+    videoFF.crossOrigin = 'anonymous';
+    videoFF.play();
+  }
+
+  // customElements.define('video-stream', class extends HTMLElement {
+  //   constructor() {
+  //     super();
+  //     const template = document.querySelector('#video-stream');
+  //     const clone = document.importNode(template.content, true);
+  //     const shadowRoot = this.attachShadow({ mode: 'open' });
+  //     this.shadowRoot.appendChild(clone);
+
+  //     this._frameLoop = this._frameLoop.bind(this);
+
+  //     this.readBuffer = null;
+  //     this.readFormat = null;
+  //   }
+
+
+
+
+
+    function connectedCallback() {
+
+      frameAvailableColor = false;
 
       this.videoColor = this._createOffscreenVideo();
-      this.videoColor.oncanplay = _ => { this.frameAvailableColor = true; }
+      this.videoColor.oncanplay = _ => { frameAvailableColor = true; }
       this.videoColor.addEventListener("play", this._frameLoop);
 
       let hasTouchListeners = false;
@@ -429,7 +558,7 @@
       }
     }
 
-    _createOffscreenVideo() {
+    function _createOffscreenVideo() {
       return Object.assign(document.createElement("video"), {
         autoplay: true,
         loop: true,
@@ -439,12 +568,11 @@
       });
     }
     
-    _frameLoopColor() {
+    // _frameLoopColor() {
 
-    }
+    // }
 
-    async _frameLoop() {
-      const gl = this.gl;
+    async function _frameLoop() {
       stats.begin();
 
       gl.clearColor(0, 0, 0, 0);
@@ -454,18 +582,27 @@
         getBodyPose(this.videoColor, net);
       }
 
-      if (bodyPixLoaded == 1) {
-        getBodyMap(this.videoColor, net)
+      if (videoLoaded == 0)
+      {
+        if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0) {
+          getBodyMap(this.videoColor, net)
+        }
+      }
+      else {
+        if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0) {
+          getBodyMap(videoFF, net)
+        }
       }
 
-      let c = this.shadowRoot.getElementById("canvasGL");
+
+      let c = document.getElementById("canvasGL");
 
 
 
 
     
 
-      if (this.frameAvailableColor) {
+      if (frameAvailableColor) {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, this.videoColor);
@@ -474,11 +611,20 @@
 
       }
 
-      if (frameCounter > 0) {
+      
+      if (videoLoaded == 1) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, videoFF);
+        gl.generateMipmap(gl.TEXTURE_2D);
+      }
+
+      if (checkFramesFlag == true && frameCounter > 0) {
         checkIfNewImage(gl, gl.lastColor_texture, gl.color_texture);
       }
       
-      if (frameCounter > 0 && this.frameAvailableColor && gl.newImage == 1) {
+      if (frameCounter > 0 && (frameAvailableColor || videoLoaded) && (gl.newImage == 1 || checkFramesFlag == false)) {
+ 
         for (let lvl = 0; lvl < numberOflevels; lvl++) {
         calcGradient(gl, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl);
         }
@@ -487,21 +633,37 @@
           inverseSearch(gl, lvl, imageSize[0], imageSize[1]);
           densify(gl, lvl, imageSize[0], imageSize[1]);
         }
+
+        copyImage(gl, gl.flow_texture, gl.densify_texture, 0, imageSize[0], imageSize[1], gl.RGBA32F);
+        genMipMap(gl, gl.flow_texture, numberOflevels, imageSize[0], imageSize[1], gl.RGBA32F);
+
         //gl.newImage = 0;
 
       }
+
 
 
       if (bodyMapFound == 1) {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, gl.mask_texture);
         //var seg = Float32Array.from(segmentation.data);
-
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED_INTEGER, gl.INT, segmentation.data);
-
+        for (let person = 0; person < segmentation.length; person++) {
+          if (segmentation[person].pose.score > 0.3) {
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, segmentation[person].data);
+          }
+        }
         var sumFlow = getFlowFromPart(gl, gl.mask_texture);
 
-        uploadGraphPoints(gl, sumFlow[1]);
+        runningSum += sumFlow[1];
+
+        plottingPoints[frameCounter % 1024] = runningSum;
+        runningMax = Math.max(...plottingPoints);
+        runningMin = Math.min(...plottingPoints);
+
+        let scaledX = normalize(runningSum, runningMax, runningMin);
+
+        uploadGraphPoints(gl, runningSum);
+        //uploadGraphPoints(gl, sumFlow[1]);
 
         //console.log(sumFlow[0], sumFlow[1]);
 
@@ -510,43 +672,57 @@
 
       }
 
-      render(gl, c.width, c.height);
+      render(gl, c.width, c.height, runningMax, runningMin);
 
 
       if (firstbodyMapFound == 1)
       { 
-        for (let person = 0; person < segmentation.allPoses.length; person++)
+        for (let person = 0; person < segmentation.length; person++)
         {
-          if (segmentation.allPoses[person].score < 0.3) {
+          if (segmentation[person].pose.score < 0.3) {
             continue;
           }
             if (bodyMapFound == 1)
             {
-          ////const adjacentKeyPoints =
-          ////posenet.getAdjacentKeyPoints(bodyPose.keypoints, 0.001);
-          // // adjacentKeyPoints.forEach((keypoints) => {
-          // //   skelePoints.push(keypoints[0].position.x);
-          // //   skelePoints.push(keypoints[0].position.y);
-          // //   //skelePoints.push(keypoints[1].position[0]);
-          // //   //skelePoints.push(keypoints[1].position[1]);
-          // // });
-          //console.log(bodyPose);
+              skeleLines = [];
+            const adjacentKeyPoints =
+            posenet.getAdjacentKeyPoints(segmentation[person].pose.keypoints, 0.8);
+            adjacentKeyPoints.forEach((keypoints) => {
+              skeleLines.push(keypoints[0].position.x);
+              skeleLines.push(keypoints[0].position.y);
+              skeleLines.push(keypoints[1].position.x);
+              skeleLines.push(keypoints[1].position.y);
+            });
 
             skelePoints = [];
-            for (let iter = 0; iter < segmentation.allPoses[person].keypoints.length; iter++)
+
+            for (let iter = 0; iter < segmentation[person].pose.keypoints.length; iter++)
             {
-              if (segmentation.allPoses[person].keypoints[iter].score < 0.1) {
+              if (segmentation[person].pose.keypoints[iter].score < 0.1) {
                 continue;
               }
-              skelePoints.push(segmentation.allPoses[person].keypoints[iter].position.x);
-              skelePoints.push(segmentation.allPoses[person].keypoints[iter].position.y);
+              skelePoints.push(segmentation[person].pose.keypoints[iter].position.x);
+              skelePoints.push(segmentation[person].pose.keypoints[iter].position.y);
             }
             bodyPoseFound = 0;
           }
+
+
           gl.useProgram(renderSkeletonProgram);
           gl.bindVertexArray(gl.vaoSkeleton);
           gl.uniform2fv(gl.getUniformLocation(renderSkeletonProgram, "imageSize"), imageSize);
-          gl.viewport(c.width / 2.0, 240, c.width / 2.0, c.height - 240);
+          gl.viewport(0, 240, c.width / 2.0, c.height - 240);
+          gl.bindBuffer(gl.ARRAY_BUFFER, gl.skeleton_buffer);
+          let sl = Float32Array.from(skeleLines);
+          gl.bufferSubData(gl.ARRAY_BUFFER, 0, sl, 0, skeleLines.length);
+          gl.lineWidth(5);
+          gl.drawArrays(gl.LINES, 0, skeleLines.length / 2);     
+          gl.bindVertexArray(null);
+
+          gl.useProgram(renderSkeletonProgram);
+          gl.bindVertexArray(gl.vaoSkeleton);
+          gl.uniform2fv(gl.getUniformLocation(renderSkeletonProgram, "imageSize"), imageSize);
+          gl.viewport(0, 240, c.width / 2.0, c.height - 240);
           gl.bindBuffer(gl.ARRAY_BUFFER, gl.skeleton_buffer);
           let sp = Float32Array.from(skelePoints);
           gl.bufferSubData(gl.ARRAY_BUFFER, 0, sp, 0, skelePoints.length);
@@ -591,7 +767,7 @@
 
 
 
-      if (this.frameAvailableColor && gl.newImage == 1) {
+      if ((frameAvailableColor || videoLoaded) && (gl.newImage == 1 || checkFramesFlag == false)) {
         //for (let lvl = 0; lvl < numberOflevels; lvl++) {
        // copyImage(gl, gl.lastColor_texture, gl.color_texture, lvl, imageSize[0], imageSize[1], gl.RGBA8UI);
       //  copyImage(gl, gl.lastGradient_texture, gl.gradient_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.RGBA32F);
@@ -618,7 +794,7 @@
 
 
       if (!this.paused)
-        window.requestAnimationFrame(this._frameLoop);
+        window.requestAnimationFrame(_frameLoop);
 
     }
 
@@ -629,23 +805,26 @@
 
     // Creates WebGL/WebGL2 context used to upload depth video to texture,
     // read the pixels to Float buffer and optionElally render the texture.
-    _configureGLContext() {
-      const canvas = this.shadowRoot.getElementById("canvasGL");
-      const gl = canvas.getContext('webgl2-compute', {antialias: false});
+    function _configureGLContext() {
+      const canvas = document.getElementById("canvasGL");
+      const ctx = canvas.getContext('webgl2-compute', {antialias: false});
 
-      if (!gl) {
+      if (!ctx) {
         document.getElementById("no-support").style.display = 'block';
         return;
       }
-      if (gl) {
+      if (ctx) {
         // The extension tells us if we can use single component R32F texture format.
-        gl.color_buffer_float_ext = gl.getExtension('EXT_color_buffer_float');
+        ctx.color_buffer_float_ext = ctx.getExtension('EXT_color_buffer_float');
       } else {
-        gl = canvas.getContext("webgl");
-        gl.getExtension("OES_texture_float");
+        ctx = canvas.getContext("webgl");
+        ctx.getExtension("OES_texture_float");
       }
 
+      return ctx;
+    }
 
+    function initGL(gl) {
 
       // VERTEX FRAGMENT SHADERS
       renderProgram = createRenderProgram(gl, vertexShaderSource, fragmentShaderSource);
@@ -653,6 +832,7 @@
       renderSkeletonProgram = createRenderProgram(gl, skeletonVertexShaderSource, skeletonFragmentShaderSource);
 
       copyImageProgram = createComputeProgram(gl, copyImageSource);
+      genMipMapProgram = createComputeProgram(gl, genMipMapSource);
       checkIfNewImageProgram = createComputeProgram(gl, checkIfNewImageSource);
       
       plottingBufferProgram = createComputeProgram(gl, plottingBufferSource);  
@@ -662,7 +842,12 @@
       disSearchProgram = createComputeProgram(gl, disSearchSource);
       disDensificationProgram = createRenderProgram(gl, disDensificationVertexShaderSource, disDensificationFragmentShaderSource);
       getFlowFromPartProgram = createComputeProgram(gl, getFlowFromPartSource);
-      
+
+    }
+
+    function setBuffers(gl) {
+
+         
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -695,7 +880,7 @@
       vaoSkeleton = gl.createVertexArray();
       gl.bindVertexArray(vaoSkeleton);
 
-      let arrSkele = new Float32Array(17 * 2);
+      let arrSkele = new Float32Array(100);
       var skeleton_buffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, skeleton_buffer);
       gl.bufferData(gl.ARRAY_BUFFER, arrSkele, gl.DYNAMIC_COPY);
@@ -705,7 +890,57 @@
 
       gl.bindVertexArray(null);
 
-      var mask_texture = generateTexture(gl, gl.TEXTURE_2D, gl.R32I, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST_MIPMAP_NEAREST);
+      let checkData = new Uint32Array(1);
+      var ssboCheckData = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboCheckData);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, checkData, gl.DYNAMIC_COPY);
+
+      let chestFlowData = new Float32Array(16 * 2);
+      var ssboChestFlowData = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboChestFlowData);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, chestFlowData, gl.DYNAMIC_COPY);
+
+
+      gl.useProgram(renderPlottingProgram);
+      vaoPlotting = gl.createVertexArray();
+      gl.bindVertexArray(vaoPlotting);
+
+      let emptyGraphPoints = new Float32Array(2*1024);
+      var ssboGraphX = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphX);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
+
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphX);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+      gl.bindVertexArray(null);
+
+
+
+      gl.vertex_buffer = vertex_buffer;
+      gl.vertex_location = vertex_location;
+      gl.index_buffer = index_buffer;
+
+
+
+      gl.vaoRender = vaoRender;
+      gl.vaoSkeleton = vaoSkeleton;
+      gl.vaoPlotting = vaoPlotting;
+
+      gl.skeleton_buffer = skeleton_buffer;
+
+gl.ssboCheckData = ssboCheckData;
+gl.ssboChestFlowData = ssboChestFlowData;
+gl.ssboGraphX = ssboGraphX;
+
+    } 
+    
+    function setTextures(gl) {
+
+
+      var mask_texture = generateTexture(gl, gl.TEXTURE_2D, gl.R32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST_MIPMAP_NEAREST);
 
       var color_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
       var lastColor_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
@@ -715,14 +950,13 @@
 
       var densify_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
 
-      var flow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var flow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
 
       var sparseFlow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0] / 4.0, imageSize[1] / 4.0, 1, gl.LINEAR, gl.LINEAR);
 
       var render_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8UI, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
 
       var test_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
-
 
       
 
@@ -758,84 +992,64 @@
 
       }
 
-      let checkData = new Uint32Array(1);
-      var ssboCheckData = gl.createBuffer();
-      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboCheckData);
-      gl.bufferData(gl.SHADER_STORAGE_BUFFER, checkData, gl.DYNAMIC_COPY);
+      gl.frameBuffers = frameBuffers;
 
-      let chestFlowData = new Float32Array(16 * 2);
-      var ssboChestFlowData = gl.createBuffer();
-      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboChestFlowData);
-      gl.bufferData(gl.SHADER_STORAGE_BUFFER, chestFlowData, gl.DYNAMIC_COPY);
-
-
-      gl.useProgram(renderPlottingProgram);
-      vaoPlotting = gl.createVertexArray();
-      gl.bindVertexArray(vaoPlotting);
-
-      let emptyGraphPoints = new Float32Array(2*1024);
-      var ssboGraphX = gl.createBuffer();
-      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphX);
-      gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
-
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphX);
-      gl.enableVertexAttribArray(0);
-      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-
-      gl.bindVertexArray(null);
 
 
       gl.newImage = newImage;
 
-
-      gl.vertex_buffer = vertex_buffer;
-      gl.vertex_location = vertex_location;
-      gl.index_buffer = index_buffer;
-
-
-
-      gl.vaoRender = vaoRender;
-      gl.vaoSkeleton = vaoSkeleton;
-      gl.vaoPlotting = vaoPlotting;
-
+      if (gl.color_texture != null) {
+        delTexture(gl, gl.color_texture);
+      }
       gl.color_texture = color_texture;
+      if (gl.lastColor_texture != null) {
+        delTexture(gl, gl.lastColor_texture);
+      }
       gl.lastColor_texture = lastColor_texture;
-
+      if (gl.gradient_texture != null) {
+        delTexture(gl, gl.gradient_texture);
+      }
       gl.gradient_texture = gradient_texture;
+      if (gl.lastGradient_texture != null) {
+        delTexture(gl, gl.lastGradient_texture);
+      }
       gl.lastGradient_texture = lastGradient_texture;
-
+      if (gl.densify_texture != null) {
+        delTexture(gl, gl.densify_texture);
+      }
       gl.densify_texture = densify_texture;
+      if (gl.flow_texture != null) {
+        delTexture(gl, gl.flow_texture);
+      }
       gl.flow_texture = flow_texture;
-
+      if (gl.sparseFlow_texture != null) {
+        delTexture(gl, gl.sparseFlow_texture);
+      }
       gl.sparseFlow_texture = sparseFlow_texture;
-
+      if (gl.render_texture != null) {
+        delTexture(gl, gl.render_texture);
+      }
       gl.render_texture = render_texture;
-
+      if (gl.test_texture != null) {
+        delTexture(gl, gl.test_texture);
+      }
       gl.test_texture = test_texture;
-
-      gl.frameBuffers = frameBuffers;
-
-      gl.skeleton_buffer = skeleton_buffer;
-
-      gl.ssboCheckData = ssboCheckData;
-      gl.ssboChestFlowData = ssboChestFlowData;
-      gl.ssboGraphX = ssboGraphX;
-
+      if (gl.mask_texture != null) {
+        delTexture(gl, gl.mask_texture);
+      }
       gl.mask_texture = mask_texture;
 
-      return gl;
     }
 
-    async loadStream(deviceId) {
+    async function loadStream(deviceId) {
       stopVideo(videos.color);
     
 
       const getUserMediaColor = () => {
         // add ?allow=all to URL to allow listing all devices (incl. those not supporting depth).
-        if (!deviceId && (new URL(window.location)).searchParams.get("allow") !== "all") {
-          return webCamera.getColorStream();
-        }
+        //if (!deviceId && (new URL(window.location)).searchParams.get("allow") !== "all") {
+          return getColorStream(imageSize[0], imageSize[1]);
+        //}
 
         const constraints = {
           video: {
@@ -849,7 +1063,10 @@
       try {
         const streamColor = await getUserMediaColor();
         this.videoColor.srcObject = streamColor;
+        this.videoColor.width = imageSize[0];
+        this.videoColor.height = imageSize[1];
         videos.color = this.videoColor;
+        
 
         //videos.color = this.videoDepth;
 
@@ -862,11 +1079,15 @@
         console.error(err);
       }
     }
-  });
+  //});
+
+
+
+
 
   function populateSelectElement(devices) {
     const selectEl = document.querySelector('#selectVideoDevice');
-    const videoStreamEl = document.querySelector('video-stream');
+    //const videoStreamEl = document.querySelector('video-stream');
 
     let selected = selectEl.value;
 
@@ -895,30 +1116,46 @@
       selectEl.value = selected;
     } else if (!selected) {
       // If no other device is selected, set the initial selection to depth device.
-      if (videoStreamEl.colorDeviceId) {
-        selectEl.value = videoStreamEl.colorDeviceId;
-      }
+      //if (videoStreamEl.colorDeviceId) {
+      //  selectEl.value = videoStreamEl.colorDeviceId;
+      //}
     }
 
 
   }
 
+
+
   function onLoad() {
-    const videoStreamEl = document.querySelector('video-stream');
+    gl = this._configureGLContext();
+    initGL(gl);
+    setTextures(gl);
+    setBuffers(gl);
+  }
+
+
+
+  function loadWebcam() {
+
+
+
+
+
+    //const videoStreamEl = document.querySelector('video-stream');
     const selectEl = document.querySelector('#selectVideoDevice');
 
     selectEl.onchange = async event => {
       selectEl.disabled = true;
       const deviceId = event.target.value;
 
-      await videoStreamEl.loadStream(deviceId);
+      await loadStream(deviceId);
 
       const devices = await navigator.mediaDevices.enumerateDevices();
       populateSelectElement(devices);
-      if (selectedtab.value != "basic") {
-        // It is on by default; stop rendering it if not visible.
-        stopBasicTab();
-      }
+      // if (selectedtab.value != "basic") {
+      //   // It is on by default; stop rendering it if not visible.
+      //   stopBasicTab();
+      // }
 
       selectEl.disabled = false;
     };
