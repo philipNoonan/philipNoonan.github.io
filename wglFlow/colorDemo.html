@@ -196,7 +196,7 @@
 
   <div>
     <!-- <label>WebGL2.0-Compute Powered Optical Flow: wglFlow:</label> -->
-    <canvas id="canvasGL" width="1696" height="960"></canvas>
+    <canvas id="canvasGL" width="1600" height="900"></canvas>
   </div>
 
   <!-- <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script> -->
@@ -235,6 +235,7 @@
   <script src="shaders/ploting.js"></script>
   <script src="shaders/skeleton.js"></script>
   <script src="shaders/checkIfNewImage.js"></script>
+  <script src="shaders/fft.js"></script>
 
 </body>
 
@@ -269,6 +270,17 @@
   var bodyPixLoaded = 0;
   var bodyMapFound = 0;
   var firstbodyMapFound = 0;
+
+  function getCursorPosition(canvas, event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    mouseClickPos[0] = (x / (canvas.width / 2));
+    mouseClickPos[1] = y / (canvas.height - 240.0);
+    //console.log("x: " + mouseClickPos[0] + " y: " + mouseClickPos[1]);
+
+
+  }
 
   function clickPoseNet() {
     loadPoseNet();
@@ -314,18 +326,31 @@
 
   }
 
-  async function getBodyMap(image, net) {
-    const seggy = await net.segmentMultiPersonParts(image, {
+  async function getBodyMap(image, net, mppmFlag) {
+    if (mppmFlag == true) {
+      const seggy = await net.segmentMultiPersonParts(image, {
       flipHorizontal: false,
       internalResolution: 'medium',
-      segmentationThreshold: 0.7,
+      segmentationThreshold: 0.5,
       maxDetections: 10,
       scoreThreshold: 0.2,
       nmsRadius: 20,
       minKeypointScore: 0.3,
-      refineSteps: 10
+      refineSteps: 20
     });
     segmentation = seggy;
+
+    }
+    else {
+      const seggy = await net.segmentPersonParts(image, {
+        flipHorizontal: false,
+        internalResolution: 'medium',
+        segmentationThreshold: 0.7
+      });
+      segmentation = seggy;
+
+    }
+
     bodyMapFound = 1;
     if (firstbodyMapFound == 0)
     {
@@ -374,6 +399,8 @@
   var runningMax = 5000;
   var plottingPoints = [];
 
+  var savingRespirationData = false;
+
   var stats = new Stats();
   stats.showPanel(0);
   stats.domElement.style.cssText = 'position:absolute;top:0px;left:0px;';
@@ -382,7 +409,9 @@
 
   var paramGUI = function() {
     this.speed = 10;
+    this.renderLevel = 0;
     this.checkForNewFrames = true;
+    this.checkMPPM = true;
     this.useWebcam = function() {
       connectedCallback();
       loadWebcam()
@@ -391,31 +420,83 @@
     this.loadFile = function() { 
       document.querySelector('input').addEventListener('change', extractFrames, false);
       document.getElementById('myInput').click();
-    }
+    };
+    this.saveToDisk = function() {
+      savingRespirationData = true;
+    };
     this.resolution = '640x480';
+    this.manVai = 'manual';
+    this.radius = 50;
+    this.bmax = 20;
+    this.bmin = 0;
   };
 
   var spd = 10;
+  var rndrLevel = 0;
+  var radius = 50;
+  var bmin = 0;
+  var bmax = 20;
   var checkFramesFlag = true;
+  var checkMPPMFlag = true;
+
+  var renderColor = true;
+  var renderGrad = false;
+  var renderFlow = true;
+
+  var usingManual = true;
+  var usingBodyPose = false;
 
   var gui = new dat.GUI();
   var param = new paramGUI();
-  gui.open();
+
+  var folderWebcam = gui.addFolder('Webcam');
+  folderWebcam.add(param, 'useWebcam').name('Use Webcam');
+  var checkReso = folderWebcam.add(param, 'resolution', ['1920x1080', '1280x720', '640x480']);
+  folderWebcam.open();
+  
+  var folderVideoFile = gui.addFolder('Video');
+  folderVideoFile.add(param, 'loadFile').name('Load video file');
+  folderVideoFile.open();
+
+  var checkFrames = gui.add(param, 'checkForNewFrames');
+  var checkMutliPersonPartMap = gui.add(param, 'checkMPPM');
 
   var spdcont = gui.add(param, 'speed', 1, 20);
-  var checkFrames = gui.add(param, 'checkForNewFrames');
-  gui.add(param, 'useWebcam').name('Use Webcam');
+  var rndrcont = gui.add(param, 'renderLevel', 0, 6);
   gui.add(param, 'loadBP').name('Load BodyPix');
-  gui.add(param, 'loadFile').name('Load video file');
-  var checkReso = gui.add(param, 'resolution', ['1920x1080', '1280x720', '640x480']);
+  gui.add(param, 'saveToDisk').name('Save Respiration Data');
+  var checkDetectMethod = gui.add(param, 'manVai', ['manual', 'bodyPose']);
+  var radcont = gui.add(param, 'radius', 10, 255);
+  var bmincont = gui.add(param, 'bmin', 0, 100);
+  var bmaxcont = gui.add(param, 'bmax', 0, 100);
 
   spdcont.onChange(function(value) {
     spd = value;
-    //console.log(spd);
+  });
+
+  rndrcont.onChange(function(value) {
+    gl.rndrLevel = Math.ceil(value);
+  });
+
+  radcont.onChange(function(value) {
+    radius = value;
   });
 
   checkFrames.onChange(function(value) {
     checkFramesFlag = value;
+  });
+
+  bmincont.onChange(function(value) {
+    bmin = value;
+  });
+
+  bmaxcont.onChange(function(value) {
+    bmax = value;
+  });
+
+  checkMutliPersonPartMap.onChange(function(value) {
+    checkMPPMFlag = value;
+
   });
 
   checkReso.onChange(function(value) {
@@ -441,10 +522,26 @@
       };
   });
 
+  checkDetectMethod.onChange(function(value) {
+    if (value == 'manual') {
+      usingManual = true;
+      usingBodyPose = false;
+
+    }
+    else if (value == 'bodyPose') {
+      usingBodyPose = true;
+      usingManual = false;
+
+    }
+  });
+
   // vao
   var vaoRender;
   var vaoSkeleton;
   var vaoPlotting;
+  var vaoDensify;
+
+  //var xhr = new XMLHttpRequest;
 
   var renderProgram;
   var renderPlottingProgram;
@@ -457,12 +554,20 @@
 
   var plottingBufferProgram;
 
+  var dft1DProgram;
+  var dft2DProgram;
+  var fft1DProgram;
+  var fft2DProgram;
+
+
   var copyImageProgram;
   var genMipMapProgram;
   var checkIfNewImageProgram;
   var edgeDetectProgram;
   var disSearchProgram;
   var getFlowFromPartProgram;
+  var getFlowFromPointProgram;
+  var makeMaskFromPointsProgram;
 
   var disDensificationProgram;
 
@@ -470,6 +575,9 @@
   var numberOflevels = 6;
 
   var gl;
+
+  var mouseClickPos = [0.5, 0.5];
+
 
 
 
@@ -584,13 +692,13 @@
 
       if (videoLoaded == 0)
       {
-        if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0) {
-          getBodyMap(this.videoColor, net)
+        if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0 || Math.round(spd) <= 1) {
+          getBodyMap(this.videoColor, net, checkMPPMFlag)
         }
       }
       else {
         if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0) {
-          getBodyMap(videoFF, net)
+          getBodyMap(videoFF, net, checkMPPMFlag)
         }
       }
 
@@ -635,23 +743,23 @@
         }
 
         copyImage(gl, gl.flow_texture, gl.densify_texture, 0, imageSize[0], imageSize[1], gl.RGBA32F);
-        genMipMap(gl, gl.flow_texture, numberOflevels, imageSize[0], imageSize[1], gl.RGBA32F);
+        //genMipMap(gl, gl.flow_texture, numberOflevels, imageSize[0], imageSize[1], gl.RGBA16F);
 
         //gl.newImage = 0;
 
+        // doDFT2D(gl, -1);
+        // doDFT2D(gl, 1);
+
+        doFFT2D(gl, 1);
+
+        //doFFT2D(gl, -1);
+
       }
 
+      if (usingManual == true) {
 
+        makeMaskFromPoints(gl, imageSize[0], imageSize[1], gl.mask_texture, mouseClickPos, radius);
 
-      if (bodyMapFound == 1) {
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, gl.mask_texture);
-        //var seg = Float32Array.from(segmentation.data);
-        for (let person = 0; person < segmentation.length; person++) {
-          if (segmentation[person].pose.score > 0.3) {
-            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, segmentation[person].data);
-          }
-        }
         var sumFlow = getFlowFromPart(gl, gl.mask_texture);
 
         runningSum += sumFlow[1];
@@ -663,6 +771,56 @@
         let scaledX = normalize(runningSum, runningMax, runningMin);
 
         uploadGraphPoints(gl, runningSum);
+        //doDFTonPoints(gl);
+        doFFTonPoints(gl, 1);
+        //doFFTonPoints(gl, -1);
+
+      }
+
+
+      if (bodyMapFound == 1) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, gl.mask_texture);
+        //var seg = Float32Array.from(segmentation.data);
+        if (checkMPPMFlag == true) {
+          try {
+            for (let person = 0; person < segmentation.length; person++) {
+              if (segmentation[person].pose.score > 0.3) {
+                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, segmentation[person].data);
+              }
+            }
+          }
+          catch(error) {
+            console.log(error);
+          }
+
+        }
+        else {
+          try {
+            let seg = Float32Array.from(segmentation.data);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, seg); 
+          }
+          catch(error) {
+            console.log(error);
+          }
+
+        }
+
+        
+        var sumFlow = getFlowFromPart(gl, gl.mask_texture);
+
+        runningSum += sumFlow[1];
+
+        plottingPoints[frameCounter % 1024] = runningSum;
+        runningMax = Math.max(...plottingPoints);
+        runningMin = Math.min(...plottingPoints);
+
+        let scaledX = normalize(runningSum, runningMax, runningMin);
+
+        uploadGraphPoints(gl, runningSum);
+        //doDFTonPoints(gl);
+        //doDFTonPoints(gl);
+
         //uploadGraphPoints(gl, sumFlow[1]);
 
         //console.log(sumFlow[0], sumFlow[1]);
@@ -672,7 +830,26 @@
 
       }
 
-      render(gl, c.width, c.height, runningMax, runningMin);
+     render(gl, c.width, c.height, runningMax, runningMin, bmin, bmax);
+
+     if (savingRespirationData == true) {
+      //xhr.open("POST", "http://127.0.0.1:3000/test", true);
+      //xhr.send([frameCounter,'flow', runningSum, '\r\n']);
+
+      let response = await fetch('http://127.0.0.1:3000/test', {
+        mode: 'no-cors',
+        method: 'POST',
+        body: ([frameCounter,'flow', runningSum, '\r\n'])
+      });
+
+
+
+     }
+
+
+
+
+
 
 
       if (firstbodyMapFound == 1)
@@ -686,7 +863,7 @@
             {
               skeleLines = [];
             const adjacentKeyPoints =
-            posenet.getAdjacentKeyPoints(segmentation[person].pose.keypoints, 0.8);
+            posenet.getAdjacentKeyPoints(segmentation[person].pose.keypoints, 0.1);
             adjacentKeyPoints.forEach((keypoints) => {
               skeleLines.push(keypoints[0].position.x);
               skeleLines.push(keypoints[0].position.y);
@@ -726,7 +903,7 @@
           gl.bindBuffer(gl.ARRAY_BUFFER, gl.skeleton_buffer);
           let sp = Float32Array.from(skelePoints);
           gl.bufferSubData(gl.ARRAY_BUFFER, 0, sp, 0, skelePoints.length);
-          gl.drawArrays(gl.POINTS, 0, skelePoints.length);     
+          gl.drawArrays(gl.POINTS, 0, skelePoints.length / 2);     
           gl.bindVertexArray(null);
 
           }
@@ -768,11 +945,11 @@
 
 
       if ((frameAvailableColor || videoLoaded) && (gl.newImage == 1 || checkFramesFlag == false)) {
-        //for (let lvl = 0; lvl < numberOflevels; lvl++) {
-       // copyImage(gl, gl.lastColor_texture, gl.color_texture, lvl, imageSize[0], imageSize[1], gl.RGBA8UI);
-      //  copyImage(gl, gl.lastGradient_texture, gl.gradient_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.RGBA32F);
-      //  copyImage(gl, gl.lastGrey_texture, gl.grey_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.R32F);
-        //}
+        // for (let lvl = 0; lvl < numberOflevels; lvl++) {
+        //   //copyImage(gl, gl.lastColor_texture, gl.color_texture, lvl, imageSize[0], imageSize[1], gl.RGBA8UI);
+        //  // copyImage(gl, gl.lastGradient_texture, gl.gradient_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.RGBA16F);
+        //   //copyImage(gl, gl.lastGrey_texture, gl.grey_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.R32F);
+        // }
           let tempVal = gl.lastColor_texture;
           gl.lastColor_texture = gl.color_texture;
           gl.color_texture = tempVal;
@@ -807,16 +984,27 @@
     // read the pixels to Float buffer and optionElally render the texture.
     function _configureGLContext() {
       const canvas = document.getElementById("canvasGL");
-      const ctx = canvas.getContext('webgl2-compute', {antialias: false});
+      var ctx = canvas.getContext('webgl2-compute', {antialias: false});
 
-      if (!ctx) {
-        document.getElementById("no-support").style.display = 'block';
-        return;
-      }
+      canvas.addEventListener('mousedown', function(e) {
+        getCursorPosition(canvas, e)
+      });
+
       if (ctx) {
         // The extension tells us if we can use single component R32F texture format.
         ctx.color_buffer_float_ext = ctx.getExtension('EXT_color_buffer_float');
-      } else {
+        ctx.oes_texture_float_linear = ctx.getExtension('OES_texture_float_linear');
+
+        if (!ctx.color_buffer_float_ext) {
+          console.log("not supporting ext float");
+        }
+        if (!ctx.oes_texture_float_linear) {
+          console.log("not supporting oes float");
+        }
+      } 
+      else {
+        document.getElementById("no-support").style.display = 'block';
+        return;
         ctx = canvas.getContext("webgl");
         ctx.getExtension("OES_texture_float");
       }
@@ -827,6 +1015,16 @@
     function initGL(gl) {
 
       // VERTEX FRAGMENT SHADERS
+
+      var numTextureUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
+      for (var unit = 0; unit < numTextureUnits; ++unit) {
+        gl.activeTexture(gl.TEXTURE0 + unit);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+      }
+
+      copyImageProgram = createComputeProgram(gl, copyImageSource);
+
+
       renderProgram = createRenderProgram(gl, vertexShaderSource, fragmentShaderSource);
       renderPlottingProgram = createRenderProgram(gl, plottingVertexShaderSource, plottingFragmentShaderSource);
       renderSkeletonProgram = createRenderProgram(gl, skeletonVertexShaderSource, skeletonFragmentShaderSource);
@@ -837,11 +1035,17 @@
       
       plottingBufferProgram = createComputeProgram(gl, plottingBufferSource);  
 
+      dft1DProgram = createComputeProgram(gl, dft1DSource);
+      dft2DProgram = createComputeProgram(gl, dft2DSource);
+      fft1DProgram = createComputeProgram(gl, fft1DSource);
+      fft2DProgram = createComputeProgram(gl, fft2DSource);
 
       edgeDetectProgram = createComputeProgram(gl, edgeDetectSource);
       disSearchProgram = createComputeProgram(gl, disSearchSource);
       disDensificationProgram = createRenderProgram(gl, disDensificationVertexShaderSource, disDensificationFragmentShaderSource);
       getFlowFromPartProgram = createComputeProgram(gl, getFlowFromPartSource);
+      getFlowFromPointProgram = createComputeProgram(gl, getFlowFromPointSource);
+      makeMaskFromPointsProgram = createComputeProgram(gl, makeMaskFromPointsSource);
 
     }
 
@@ -900,6 +1104,25 @@
       gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboChestFlowData);
       gl.bufferData(gl.SHADER_STORAGE_BUFFER, chestFlowData, gl.DYNAMIC_COPY);
 
+      gl.useProgram(disDensificationProgram);
+      vaoDensify = gl.createVertexArray();
+      gl.bindVertexArray(vaoDensify);
+
+      let arrDensify = new Int32Array(4 * 2);
+
+
+      var sparsePix_buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, sparsePix_buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, arrDensify, gl.STATIC_DRAW);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.sparsePix_buffer);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+
+      gl.bindVertexArray(null);
+
+
 
       gl.useProgram(renderPlottingProgram);
       vaoPlotting = gl.createVertexArray();
@@ -910,12 +1133,26 @@
       gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphX);
       gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
 
+      var ssboDFT1D0 = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboDFT1D0);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
+
+      var ssboDFT1D1 = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboDFT1D1);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
+
+
 
       gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphX);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
+      gl.bindBuffer(gl.ARRAY_BUFFER, ssboDFT1D1);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
       gl.bindVertexArray(null);
+
 
 
 
@@ -923,17 +1160,29 @@
       gl.vertex_location = vertex_location;
       gl.index_buffer = index_buffer;
 
+      gl.sparsePix_buffer = sparsePix_buffer;
+
 
 
       gl.vaoRender = vaoRender;
       gl.vaoSkeleton = vaoSkeleton;
       gl.vaoPlotting = vaoPlotting;
+      gl.vaoDensify = vaoDensify;
 
       gl.skeleton_buffer = skeleton_buffer;
 
 gl.ssboCheckData = ssboCheckData;
 gl.ssboChestFlowData = ssboChestFlowData;
 gl.ssboGraphX = ssboGraphX;
+gl.ssboDFT1D0 = ssboDFT1D0;
+gl.ssboDFT1D1 = ssboDFT1D1;
+
+gl.rndrLevel = rndrLevel;
+
+gl.renderColor = renderColor;
+gl.renderGrad = renderGrad;
+gl.renderFlow = renderFlow;
+
 
     } 
     
@@ -945,20 +1194,21 @@ gl.ssboGraphX = ssboGraphX;
       var color_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
       var lastColor_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
 
-      var gradient_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
-      var lastGradient_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
+      var gradient_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
+      var lastGradient_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
 
-      var densify_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
+      var densify_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
 
-      var flow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
+      var flow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
 
-      var sparseFlow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0] / 4.0, imageSize[1] / 4.0, 1, gl.LINEAR, gl.LINEAR);
+      var sparseFlow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0] / 4.0, imageSize[1] / 4.0, 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
 
       var render_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8UI, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
 
       var test_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
 
-      
+      var srcTex = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var dstTex = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
 
 
 
@@ -985,6 +1235,9 @@ gl.ssboGraphX = ssboGraphX;
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, depthTexture, 0);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, densify_texture, lvl);
         //gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, topFlow_texture, lvl);
+
+        const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+        console.log(`can ${status === gl.FRAMEBUFFER_COMPLETE ? "" : "NOT "}render to R32`);
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -1039,6 +1292,14 @@ gl.ssboGraphX = ssboGraphX;
       }
       gl.mask_texture = mask_texture;
 
+      if (gl.srcTex != null) {
+        delTexture(gl, gl.srcTex);
+      }
+      gl.srcTex = srcTex;
+      if (gl.dstTex != null) {
+        delTexture(gl, gl.dstTex);
+      }
+      gl.dstTex = dstTex;
     }
 
     async function loadStream(deviceId) {
