@@ -323,7 +323,7 @@
 
   async function loadBodyPix() {
     net = await bodyPix.load({
-      architecture: 'ResNet50',
+      architecture: 'MobileNetV1',
       outputStride: 16,
       multiplier: 1.0,
       quantBytes: 2
@@ -337,7 +337,7 @@
       const seggy = await net.segmentMultiPersonParts(image, {
       flipHorizontal: false,
       internalResolution: 'medium',
-      segmentationThreshold: 0.5,
+      segmentationThreshold: 0.3,
       maxDetections: 10,
       scoreThreshold: 0.3,
       nmsRadius: 20,
