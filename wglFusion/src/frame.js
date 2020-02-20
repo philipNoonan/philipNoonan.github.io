@@ -17,7 +17,7 @@ function getClickedPoint(gl) {
   gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, clickedVert);
 
   initPose = glMatrix.mat4.create();
-  glMatrix.mat4.translate(initPose, initPose, [-clickedVert[0] + sliderVolumeLength.value / 2.0, -clickedVert[1] + sliderVolumeLength.value / 2.0, -clickedVert[2] + sliderVolumeLength.value / 2.0]);
+  glMatrix.mat4.translate(initPose, initPose, [-clickedVert[0] + volLength / 2.0, -clickedVert[1] + volLength / 2.0, -clickedVert[2] + volLength / 2.0]);
   pose = [...initPose];
 
 }

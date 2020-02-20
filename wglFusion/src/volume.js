@@ -15,7 +15,7 @@ function integrateVolume(gl, _iFlag, _rFlag) {
     gl.uniform1i(gl.getUniformLocation(integrateProg, "p2v"), 0);
 
     gl.uniform1f(gl.getUniformLocation(integrateProg, "maxWeight"), 100.0);
-    gl.uniform1f(gl.getUniformLocation(integrateProg, "volDim"), sliderVolumeLength.value);
+    gl.uniform1f(gl.getUniformLocation(integrateProg, "volDim"), volLength);
     gl.uniform1f(gl.getUniformLocation(integrateProg, "volSize"), volSize[0]);
 
 
@@ -49,17 +49,17 @@ function raycastVolume(gl, width, height) {
     let view = glMatrix.mat4.create();
     glMatrix.mat4.mul(view, pose, invK);
 
-    let dMin = -sliderVolumeLength.value / 20.0;
-    let dMax = sliderVolumeLength.value / 10.0;
+    let dMin = -volLength / 20.0;
+    let dMax = volLength / 10.0;
 
-    let step = sliderVolumeLength.value / volSize[0];
+    let step = volLength / volSize[0];
 
     gl.uniformMatrix4fv(gl.getUniformLocation(raycastProg, "view"), false, view);
     gl.uniform1f(gl.getUniformLocation(raycastProg, "step"), step);
     gl.uniform1f(gl.getUniformLocation(raycastProg, "largeStep"), 0.5 * 0.75);
     gl.uniform1f(gl.getUniformLocation(raycastProg, "nearPlane"), 0.01);
     gl.uniform1f(gl.getUniformLocation(raycastProg, "farPlane"), 3.0);
-    gl.uniform1f(gl.getUniformLocation(raycastProg, "volDim"), sliderVolumeLength.value);
+    gl.uniform1f(gl.getUniformLocation(raycastProg, "volDim"), volLength);
     gl.uniform1f(gl.getUniformLocation(raycastProg, "volSize"), volSize[0]);
 
     gl.dispatchCompute(width / 32, height / 32, 1);

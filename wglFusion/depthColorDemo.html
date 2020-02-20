@@ -19,16 +19,6 @@
     max-width: 400px;
   }
 
-  select {
-    background-color: transparent;
-    width: 100%;
-    padding: 4px 0;
-    font-size: 16px;
-    color: rgba(0,0,0, 0.26);
-    border: none;
-    border-bottom: 1px solid rgba(0,0,0, 0.12);
-  }
-
   select:focus {
     outline: none;
   }
@@ -157,59 +147,33 @@
       display: block;
     }
   </style>
-  <div>
-    <label>WebGL2.0-Compute Powered ICP wglFusion:</label>
-    <canvas id="canvasGL" width="1696" height="720"></canvas>
-  </div>
+
 </template>
 
 <body onload="onLoad()">
   <h2>wglFusion Demo</h2>
+  <div id="no-support" style="display: none">
+    <p><mark class="secondary" style="margin-right: 0.5em"></mark> It seems like WebGL 2.0 Compute is not available on your browser. Make sure you are on a system with WebGL 2.0 Compute enabled.</p>
+    <p>Have you tried to open your browser using these arguments ?</p>
+    <p>Windows: </p>
+    <pre>chrome.exe --use-cmd-decoder=passthrough --use-angle=gl --enable-webgl2-compute-context</pre>
+    <p>Linux - USE CHROME DEV: </p>
+    <pre>google-chrome-unstable --use-gl=angle --use-angle=gl --use-cmd-decoder=passthrough --enable-webgl2-compute-context</pre>
+  </div>
   <div id="console">
     <!-- Print error messages here. -->
   </div>
-  <div class="select">
-    <label for="selectVideoDevice">Capture device with depth stream</label>
-    <select id="selectVideoDevice"></select>
-  </div>
-  <div class="slidecontainer">
-    <p>Lenght in m: <span id="volLength"></span></p>
-    <input type="range" min="0.05" max="5" step="0.01" value="0.5" class="slider" id="volumeLength">
-    <p>Resolution in voxels: <span id="numVox"></span></p>
-    <input type="range" min="5" max="9" step="1" value="6" class="slider" id="numberVoxels">
-  </div>
-  <div id="buttoncontainer">
-    <button onclick="resetVolume()">Reset Volume</button>
-    <button onclick="integrateClick()">Integrate Volume</button>
-    <input type="radio" id="integrateRadio" checked>
-    <button onclick="clickPoseNet()">Load PoseNet</button>
-
-  </div>
   <div>
-    <button onclick="renderDepthClick()">Render Depth</button>
-    <input type="radio" id="renderDepthRadio" checked>
-    <button onclick="renderColorClick()">Render Color</button>
-    <input type="radio" id="renderColorRadio">
-    <button onclick="renderRefNormClick()">Render refNorm</button>
-    <input type="radio" id="renderRefNormRadio">
-    <button onclick="renderRefVertClick()">Render refVert</button>
-    <input type="radio" id="renderRefVertRadio">
-    <button onclick="renderNormClick()">Render Norm</button>
-    <input type="radio" id="renderNormRadio">
-    <button onclick="renderVertClick()">Render Vert</button>
-    <input type="radio" id="renderVertRadio">
+    <label>WebGL2.0-Compute Powered ICP wglFusion:</label>
+    <canvas id="canvasGL" width="1696" height="720"></canvas>
   </div>
-  <div id="tabcontainer">
-    <input id="tab1" type="radio" name="tabs" value="basic" checked="checked" data-ontaboff="stopBasicTab" data-ontabon="startBasicTab"/>
-    <div id="tabcontent">
-      <div id = tabcontent1>
-        <video-stream></video-stream>
-      </div>
-  </div>
+ 
   <script src="node_modules/gl-matrix/gl-matrix-min.js"></script>
   <script src="node_modules/luqr/luqr.min.js"></script>
   <script src="node_modules/mathjs/dist/math.js"></script>
   <script src="node_modules/stats.js/build/stats.min.js"></script>
+  <script src="node_modules/dat.gui/build/dat.gui.min.js"></script>
+
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet"></script>
@@ -264,6 +228,17 @@
     target.innerHTML += `${message}<br>`;
   }
 
+
+
+
+
+
+
+
+
+
+
+
   function clickPoseNet() {
     loadPoseNet();
   }
@@ -303,54 +278,13 @@
     resetFlag = 1;
     pose = [...initPose];
 
-    volSize = [Math.pow(2,sliderNumberVoxels.value), Math.pow(2,sliderNumberVoxels.value), Math.pow(2,sliderNumberVoxels.value)]
+    //volSize = [volResolution, volResolution, volResolution]
   
 
   
   }
 
-  function integrateClick() {
-    integrateFlag = 1 - integrateFlag;
-    var intFlag = document.getElementById("integrateRadio");
 
-    if (integrateFlag == 1) {
-      intFlag.checked = true;
-    }
-    else {
-      intFlag.checked = false;
-    }
-  }
-
-  function renderDepthClick() {
-    renderDepthFlag = 1 - renderDepthFlag;
-    let flag = document.getElementById("renderDepthRadio");
-    flag.checked = renderDepthFlag == 1 ? true : false;
-  }
-  function renderColorClick() {
-    renderColorFlag = 1 - renderColorFlag;
-    let flag = document.getElementById("renderColorRadio");
-    flag.checked = renderColorFlag == 1 ? true : false;
-  }
-  function renderRefNormClick() {
-    renderRefNormFlag = 1 - renderRefNormFlag;
-    let flag = document.getElementById("renderRefNormRadio");
-    flag.checked = renderRefNormFlag == 1 ? true : false;
-  }
-  function renderRefVertClick() {
-    renderRefVertFlag = 1 - renderRefVertFlag;
-    let flag = document.getElementById("renderRefVertRadio");
-    flag.checked = renderRefVertFlag == 1 ? true : false;
-  }
-  function renderVertClick() {
-    renderVertFlag = 1 - renderVertFlag;
-    let flag = document.getElementById("renderVertRadio");
-    flag.checked = renderVertFlag == 1 ? true : false;
-  }
-  function renderNormClick() {
-    renderNormFlag = 1 - renderNormFlag;
-    let flag = document.getElementById("renderNormRadio");
-    flag.checked = renderNormFlag == 1 ? true : false;
-  }
 
   let tabs = document.getElementsByName("tabs");
   let videos = {depth: null, color: null};
@@ -391,31 +325,68 @@
   }
 
 
-
+  var gl;
 
 
   // UI stuff
-  var sliderVolumeLength = document.getElementById("volumeLength");
-  var sliderNumberVoxels = document.getElementById("numberVoxels");
 
-  var textVolumeLength = document.getElementById("volLength");
-  var textNumberVoxels = document.getElementById("numVox");
+  var volLength = 0.5;
 
-  textVolumeLength.innerHTML = sliderVolumeLength.value;
-  textNumberVoxels.innerHTML = Math.pow(2,sliderNumberVoxels.value);
-
-  sliderVolumeLength.oninput = function() {
-    textVolumeLength.innerHTML = this.value;
+  var paramGUI = function () {
+    this.loadCamera = function() {
+      connectedCallback();
+      loadRealsense();
+    }
+    this.resetVol = function() {
+      resetVolume();
+    }
+    this.integrateVol = true;
+    this.length = 0.5;
+    this.resolution = 128;
+    this.renderDepth = true;
+    this.renderColor = false;
+    this.renderNormal = true;
   }
 
-  sliderNumberVoxels.oninput = function() {
-    textNumberVoxels.innerHTML = Math.pow(2, this.value);
-  }
+  var gui = new dat.GUI();
+  var param = new paramGUI();
+
+  gui.add(param, 'loadCamera').name('Load Realsense');
+  var resetClick = gui.add(param, 'resetVol').name('Reset Volume');
+  var integrateClick = gui.add(param, 'integrateVol').name('Integrate');
+  var lengthSlider = gui.add(param, 'length', 0.05, 2.0);
+  var resolutionSlider = gui.add(param, 'resolution', [64, 128, 256, 512]);
+  var renderDepthClick = gui.add(param, 'renderDepth').name('Depth')
+  var renderNormalClick = gui.add(param, 'renderNormal').name('Normals')
+
+  integrateClick.onChange(function(value) {
+    integrateFlag = value;
+  });
+
+  lengthSlider.onChange(function(value) {
+    volLength = value;
+  });
+
+  resolutionSlider.onChange(function(value) {
+    volSize = [value, value, value];
+  });
+
+  renderDepthClick.onChange(function(value) {
+    renderDepthFlag = value;
+  });
+
+  renderNormalClick.onChange(function(value) {
+    renderRefNormFlag = value;
+  });
+
 
   var stats = new Stats();
   stats.showPanel(0);
   stats.domElement.style.cssText = 'position:absolute;top:0px;right:0px;';
   document.body.appendChild(stats.dom);
+
+  var videoDevices = [];
+
 
   // vao
   var vaoPlotting;
@@ -471,7 +442,11 @@
   //    invK[8] = -camPam[0] / camPam[2];
   //    invK[9] = -camPam[1] / camPam[3];
 
-  var volSize = [Math.pow(2,sliderNumberVoxels.value), Math.pow(2,sliderNumberVoxels.value), Math.pow(2,sliderNumberVoxels.value)];
+  var newImage = 1;
+  var frameAvailableColor = false;
+  var frameAvailableDepth = false;
+
+  var volSize = [128, 128, 128];
 
   var imageSize = [848, 480];
 
@@ -486,7 +461,7 @@
 
   var frameCounter = 1;
 
-  glMatrix.mat4.translate(pose, pose, [sliderVolumeLength.value / 2.0, sliderVolumeLength.value / 2.0, 0.0]);
+  glMatrix.mat4.translate(pose, pose, [volLength / 2.0, volLength / 2.0, 0.0]);
   initPose = [...pose];
   glMatrix.mat4.invert(invIP, initPose);
 
@@ -496,98 +471,69 @@
   function normalize(val, max, min) { return (val - min) / (max - min); }
 
 
-  customElements.define('video-stream', class extends HTMLElement {
-    constructor() {
-      super();
-      const template = document.querySelector('#video-stream');
-      const clone = document.importNode(template.content, true);
-      const shadowRoot = this.attachShadow({ mode: 'open' });
-      this.shadowRoot.appendChild(clone);
+  function connectedCallback() {
 
-      this._frameLoop = this._frameLoop.bind(this);
+frameAvailableColor = false;
 
-      this.readBuffer = null;
-      this.readFormat = null;
-    }
+// this.videoColor = this._createOffscreenVideo();
+// this.videoColor.oncanplay = _ => { frameAvailableColor = true; }
+// this.videoColor.addEventListener("play", this._frameLoop);
 
+// let hasTouchListeners = false;
+// const onVideoTouchStart = _ => {
+//   hasTouchListeners = false;
+//   window.removeEventListener("touchstart", onVideoTouchStart, true);
+//   this.videoColor.play();
+// }
 
-    connectedCallback() {
-      this.gl = this._configureGLContext();
+// if (this.videoColor && this.videoColor.paused && !hasTouchListeners) {
+//   hasTouchListeners = true;
+//   window.addEventListener("touchstart", onVideoTouchStart, true);
+// }
 
-      this.frameAvailable = false;
-      this.frameAvailableColor = false;
+videos.color = this._createOffscreenVideo();
+videos.color.oncanplay = _ => { frameAvailableColor = true; }
 
-      this.videoDepth = this._createOffscreenVideo();
-      this.videoDepth.oncanplay = _ => { this.frameAvailable = true; }
-      this.videoDepth.addEventListener("play", this._frameLoop);
+videos.depth = this._createOffscreenVideo();
+videos.depth.oncanplay = _ => { frameAvailableDepth = true; }
 
-      let hasTouchListeners = false;
-      const onVideoTouchStart = _ => {
-        hasTouchListeners = false;
-        window.removeEventListener("touchstart", onVideoTouchStart, true);
-        this.videoDepth.play();
-      }
+videos.color.addEventListener("play", this.frameLoop); // fires when the color feed becomes available
 
-      if (this.videoDepth && this.videoDepth.paused && !hasTouchListeners) {
-        hasTouchListeners = true;
-        window.addEventListener("touchstart", onVideoTouchStart, true);
-      }
+}
 
-      this.videoColor = this._createOffscreenVideo();
-      this.videoColor.oncanplay = _ => { this.frameAvailableColor = true; }
-      this.videoColor.addEventListener("play", this._frameLoopColor);
+function _createOffscreenVideo() {
+return Object.assign(document.createElement("video"), {
+  autoplay: true,
+  loop: true,
+  crossOrigin: "anonymous",
+  width: imageSize[0],
+  height: imageSize[1]
+});
+}
 
-      let hasTouchListenersColor = false;
-      const onVideoTouchStartColor = _ => {
-        hasTouchListenersColor = false;
-        window.removeEventListener("touchstart", onVideoTouchStartColor, true);
-        this.videoColor.playColor();
-      }
-
-      if (this.videoColor && this.videoColor.paused && !hasTouchListenersColor) {
-        hasTouchListenersColor = true;
-        window.addEventListener("touchstart", onVideoTouchStartColor, true);
-      }
-    }
-
-    _createOffscreenVideo() {
-      return Object.assign(document.createElement("video"), {
-        autoplay: true,
-        loop: true,
-        crossOrigin: "anonymous",
-        width: imageSize[0],
-        height: imageSize[1]
-      });
-    }
-    
-    _frameLoopColor() {
-
-    }
-
-    _frameLoop() {
-      const gl = this.gl;
+  async function frameLoop() {
       stats.begin();
 
-      let c = this.shadowRoot.getElementById("canvasGL");
+      let c = document.getElementById("canvasGL");
 
 
 
 
-      if (this.frameAvailable) {
+      if (frameAvailableDepth) {
         // Upload the video frame to texture.
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
-		    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, this.videoDepth);
+		    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, videos.depth);
       }
 
-      if (this.frameAvailableColor) {
+      if (frameAvailableColor) {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
-		    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, this.videoColor);
+		    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, videos.color);
       }
 
       if (poseNetLoaded == 1) {
-        getBodyPose(this.videoColor, net);
+        getBodyPose(videos.color, net);
         //console.log(bodyPose)
 
 
@@ -648,50 +594,99 @@
       frameCounter++;
       stats.end();
       if (!this.paused)
-        window.requestAnimationFrame(this._frameLoop);
+        window.requestAnimationFrame(frameLoop);
+    }
+
+  function populateSelectElement(devices) {
+    const selectEl = document.querySelector('#selectVideoDevice');
+    const videoStreamEl = document.querySelector('video-stream');
+
+    let selected = selectEl.value;
+
+    while (selectEl.firstChild) {
+      selectEl.removeChild(selectEl.firstChild);
+    }
+
+    let selectedDeviceStillExists = false;
+    for (let i = 0; i < devices.length; ++i) {
+      const info = devices[i];
+      if (info.kind !== 'videoinput') {
+        continue;
+      }
+
+      const optionEl = document.createElement('option');
+      optionEl.value = info.deviceId;
+      optionEl.text = info.label || 'camera ' + (selectEl.length + 1);
+      selectEl.appendChild(optionEl);
+
+      if (optionEl.value === selected) {
+        selectedDeviceStillExists = true;
+      }
+    }
+
+    if (selectedDeviceStillExists) {
+      selectEl.value = selected;
+    } else if (!selected) {
+      // If no other device is selected, set the initial selection to depth device.
+      if (videoStreamEl.depthDeviceId) {
+        selectEl.value = videoStreamEl.depthDeviceId;
+      }
     }
 
 
+  }
 
 
+  function setTextures(gl) {
+
+    var depth_texture = generateTexture(gl, gl.TEXTURE_2D, gl.R32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var color_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+
+      var volume_texture = generateTexture(gl, gl.TEXTURE_3D, gl.R32F, 1, volSize[0], volSize[1], volSize[2], gl.NEAREST, gl.NEAREST);
+      var volumeWeight_texture = generateTexture(gl, gl.TEXTURE_3D, gl.R32F, 1, volSize[0], volSize[1], volSize[2], gl.NEAREST, gl.NEAREST);
+
+      var render_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8UI, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var renderGraph_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8UI, 1, 1024, 240, 1, gl.NEAREST, gl.NEAREST);
+
+      var vertex_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var normal_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+
+      var refVertex_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var refNormal_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
 
 
-    // Creates WebGL/WebGL2 context used to upload depth video to texture,
-    // read the pixels to Float buffer and optionElally render the texture.
-    _configureGLContext() {
-      const canvas = this.shadowRoot.getElementById("canvasGL");
-      const gl = canvas.getContext('webgl2-compute', {antialias: false});
-      if (gl) {
-        // The extension tells us if we can use single component R32F texture format.
-        gl.color_buffer_float_ext = gl.getExtension('EXT_color_buffer_float');
-      } else {
-        gl = canvas.getContext("webgl");
-        gl.getExtension("OES_texture_float");
-      }
-      // from https://stackoverflow.com/questions/55677/how-do-i-get-the-coordinates-of-a-mouse-click-on-a-canvas-element/18053642#18053642
-      canvas.addEventListener('mousedown', function(e) {
-        getCursorPosition(canvas, e)
-      })
+      // Framebuffer for reading back the texture.
+      var framebuffer = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, render_texture, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      // Framebuffer for reading back the texture.
+      var framebufferGraph = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebufferGraph);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, renderGraph_texture, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
 
-      // COMPUTE SHADERS
-      depthToVertProg = createComputeProgram(gl, depthToVertSource);  
-      vertToNormProg = createComputeProgram(gl, vertToNormSource);  
-      integrateProg = createComputeProgram(gl, integrateSource);  
-      raycastProg = createComputeProgram(gl, raycastSource);  
-      p2pTrackProg = createComputeProgram(gl, p2pTrackSource);  
-      p2pReduceProg = createComputeProgram(gl, p2pReduceSource);  
-      p2vTrackProg = createComputeProgram(gl, p2vTrackSource);  
-      p2vReduceProg = createComputeProgram(gl, p2vReduceSource);  
-      clickedPointProg = createComputeProgram(gl, clickedPointSource);  
-      plottingBufferProg = createComputeProgram(gl, plottingBufferSource);  
-      // VERTEX FRAGMENT SHADERS
-      plottingRenderProgram = createRenderProgram(gl, plottingVertexShaderSource, plottingFragmentShaderSource);
-      renderProgram = createRenderProgram(gl, vertexShaderSource, fragmentShaderSource);
-      renderSkeletonProgram = createRenderProgram(gl, skeletonVertexShaderSource, skeletonFragmentShaderSource);
+     
 
-            
-      gl.enable(gl.BLEND);
+      gl.depth_texture = depth_texture;
+      gl.color_texture = color_texture;
+      gl.vertex_texture = vertex_texture;
+      gl.normal_texture = normal_texture;
+      gl.volume_texture = volume_texture;      
+      gl.volumeWeight_texture = volumeWeight_texture;
+      gl.refVertex_texture = refVertex_texture;
+      gl.refNormal_texture = refNormal_texture;
+      gl.render_texture = render_texture;
+
+
+      gl.framebuffer = framebuffer;
+      gl.framebufferGraph = framebufferGraph;
+  }
+
+  function setBuffers(gl) {
+    gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
       // BINDING BUFFERS
@@ -776,35 +771,6 @@
 
       gl.bindVertexArray(null);
 
-      var depth_texture = generateTexture(gl, gl.TEXTURE_2D, gl.R32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
-      var color_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
-
-      var volume_texture = generateTexture(gl, gl.TEXTURE_3D, gl.R32F, 1, volSize[0], volSize[1], volSize[2], gl.NEAREST, gl.NEAREST);
-      var volumeWeight_texture = generateTexture(gl, gl.TEXTURE_3D, gl.R32F, 1, volSize[0], volSize[1], volSize[2], gl.NEAREST, gl.NEAREST);
-
-      var render_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8UI, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
-      var renderGraph_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8UI, 1, 1024, 240, 1, gl.NEAREST, gl.NEAREST);
-
-      var vertex_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
-      var normal_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
-
-      var refVertex_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
-      var refNormal_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
-
-
-      // Framebuffer for reading back the texture.
-      var framebuffer = gl.createFramebuffer();
-      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, render_texture, 0);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-      // Framebuffer for reading back the texture.
-      var framebufferGraph = gl.createFramebuffer();
-      gl.bindFramebuffer(gl.FRAMEBUFFER, framebufferGraph);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, renderGraph_texture, 0);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-
       gl.vertex_buffer = vertex_buffer;
       gl.vertex_location = vertex_location;
       gl.index_buffer = index_buffer;
@@ -822,146 +788,128 @@
       gl.vaoPlotting = vaoPlotting;
       gl.vaoRender = vaoRender;
       gl.vaoSkeleton = vaoSkeleton;
+  }
 
-      gl.depth_texture = depth_texture;
-      gl.color_texture = color_texture;
-      gl.vertex_texture = vertex_texture;
-      gl.normal_texture = normal_texture;
-      gl.volume_texture = volume_texture;      
-      gl.volumeWeight_texture = volumeWeight_texture;
-      gl.refVertex_texture = refVertex_texture;
-      gl.refNormal_texture = refNormal_texture;
-      gl.render_texture = render_texture;
+  function initGL(gl) {
+      // COMPUTE SHADERS
+      depthToVertProg = createComputeProgram(gl, depthToVertSource);  
+      vertToNormProg = createComputeProgram(gl, vertToNormSource);  
+      integrateProg = createComputeProgram(gl, integrateSource);  
+      raycastProg = createComputeProgram(gl, raycastSource);  
+      p2pTrackProg = createComputeProgram(gl, p2pTrackSource);  
+      p2pReduceProg = createComputeProgram(gl, p2pReduceSource);  
+      p2vTrackProg = createComputeProgram(gl, p2vTrackSource);  
+      p2vReduceProg = createComputeProgram(gl, p2vReduceSource);  
+      clickedPointProg = createComputeProgram(gl, clickedPointSource);  
+      plottingBufferProg = createComputeProgram(gl, plottingBufferSource);  
+      // VERTEX FRAGMENT SHADERS
+      plottingRenderProgram = createRenderProgram(gl, plottingVertexShaderSource, plottingFragmentShaderSource);
+      renderProgram = createRenderProgram(gl, vertexShaderSource, fragmentShaderSource);
+      renderSkeletonProgram = createRenderProgram(gl, skeletonVertexShaderSource, skeletonFragmentShaderSource);
+  }
 
+  // Creates WebGL/WebGL2 context used to upload depth video to texture,
+    // read the pixels to Float buffer and optionElally render the texture.
+    function configureGLContext() {
+      const canvas = document.getElementById("canvasGL");
+      var ctx = canvas.getContext('webgl2-compute', {antialias: false});
 
-      gl.framebuffer = framebuffer;
-      gl.framebufferGraph = framebufferGraph;
+      canvas.addEventListener('mousedown', function(e) {
+        getCursorPosition(canvas, e)
+      });
 
-      return gl;
+      if (ctx) {
+        // The extension tells us if we can use single component R32F texture format.
+        ctx.color_buffer_float_ext = ctx.getExtension('EXT_color_buffer_float');
+        ctx.oes_texture_float_linear = ctx.getExtension('OES_texture_float_linear');
+
+        if (!ctx.color_buffer_float_ext) {
+          console.log("not supporting ext float");
+        }
+        if (!ctx.oes_texture_float_linear) {
+          console.log("not supporting oes float");
+        }
+      } 
+      else {
+        document.getElementById("no-support").style.display = 'block';
+        return;
+        ctx = canvas.getContext("webgl");
+        ctx.getExtension("OES_texture_float");
+      }
+
+      return ctx;
     }
 
-    async loadStream(deviceId) {
-      stopVideo(videos.depth);
+  async function loadStream(deviceId) {
       stopVideo(videos.color);
-
-      // If the item in drop-down list is selected, use it.
-      const getUserMediaDepth = () => {
-        // add ?allow=all to URL to allow listing all devices (incl. those not supporting depth).
-        if (!deviceId && (new URL(window.location)).searchParams.get("allow") !== "all") {
-          return DepthCamera.getDepthStream();
-        }
-
-        const constraints = {
-          video: {
-            deviceId: deviceId ? { exact: deviceId } : {}
-          }
-        }
-
-        return navigator.mediaDevices.getUserMediaDepth(constraints);
-      }
-
-      const getUserMediaColor = () => {
-        // add ?allow=all to URL to allow listing all devices (incl. those not supporting depth).
-        if (!deviceId && (new URL(window.location)).searchParams.get("allow") !== "all") {
-          return DepthCamera.getColorStream();
-        }
-
-        const constraints = {
-          video: {
-            deviceId: deviceId ? { exact: deviceId } : {}
-          }
-        }
-
-        return navigator.mediaDevices.getUserMediaColor(constraints);
-      }
-
+  
       try {
-        const streamDepth = await getUserMediaDepth();
-        this.videoDepth.srcObject = streamDepth;
-        videos.depth = this.videoDepth;
+        const streamColor = await getColorStream(imageSize[0], imageSize[1], deviceId);
 
-        const streamColor = await getUserMediaColor();
-        this.videoColor.srcObject = streamColor;
-        videos.color = this.videoColor;
-
-        //videos.color = this.videoDepth;
-
-        // Chrome, starting with version 59, implements getSettings() API.
-        const tracksDepth = streamDepth.getVideoTracks()[0];
-        if (tracksDepth.getSettings) {
-          this.depthDeviceId = tracksDepth.getSettings().deviceId;
+        if (streamColor[1] == 'color') {
+          videos.color.srcObject = streamColor[0];
+          videos.color.width = imageSize[0];
+          videos.color.height = imageSize[1];
+          //videos.color = this.videoColor; 
         }
-
-        const tracksColor = streamColor.getVideoTracks()[0];
-        if (tracksColor.getSettings) {
-          this.colorDeviceId = tracksColor.getSettings().deviceId;
+        else if (streamColor[1] == 'depth') {
+          videos.depth.srcObject = streamColor[0];
+          videos.depth.width = imageSize[0];
+          videos.depth.height = imageSize[1];
+          //videos.depth = this.videoDepth; 
         }
-
       } catch (err) {
         console.error(err);
       }
     }
-  });
 
-  function populateSelectElement(devices) {
-    const selectEl = document.querySelector('#selectVideoDevice');
-    const videoStreamEl = document.querySelector('video-stream');
-
-    let selected = selectEl.value;
-
-    while (selectEl.firstChild) {
-      selectEl.removeChild(selectEl.firstChild);
+  function loadRealsense() {
+    for (let i = 0; i < videoDevices.length; i++) {
+      loadStream(videoDevices[i])
     }
-
-    let selectedDeviceStillExists = false;
-    for (let i = 0; i < devices.length; ++i) {
-      const info = devices[i];
-      if (info.kind !== 'videoinput') {
-        continue;
-      }
-
-      const optionEl = document.createElement('option');
-      optionEl.value = info.deviceId;
-      optionEl.text = info.label || 'camera ' + (selectEl.length + 1);
-      selectEl.appendChild(optionEl);
-
-      if (optionEl.value === selected) {
-        selectedDeviceStillExists = true;
-      }
-    }
-
-    if (selectedDeviceStillExists) {
-      selectEl.value = selected;
-    } else if (!selected) {
-      // If no other device is selected, set the initial selection to depth device.
-      if (videoStreamEl.depthDeviceId) {
-        selectEl.value = videoStreamEl.depthDeviceId;
-      }
-    }
-
-
   }
-
   function onLoad() {
-    const videoStreamEl = document.querySelector('video-stream');
-    const selectEl = document.querySelector('#selectVideoDevice');
 
-    selectEl.onchange = async event => {
-      selectEl.disabled = true;
-      const deviceId = event.target.value;
+    navigator.mediaDevices.enumerateDevices()
+      .then(function(devices) {
+        devices.forEach(function(device) {
+          //console.log(device.kind + ": " + device.label +
+          //            " id = " + device.deviceId);
+          if (device.kind == "videoinput") {
+            videoDevices.push(device.deviceId);
+            //loadStream(deviceId);
+          }
+        });
+      })
+      .catch(function(err) {
+        console.log(err.name + ": " + err.message);
+      });
 
-      await videoStreamEl.loadStream(deviceId);
+    gl = this.configureGLContext();
 
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      populateSelectElement(devices);
-      if (selectedtab.value != "basic") {
-        // It is on by default; stop rendering it if not visible.
-        stopBasicTab();
-      }
+    initGL(gl);
+    setTextures(gl);
+    setBuffers(gl);
 
-      selectEl.disabled = false;
-    };
-    selectEl.dispatchEvent(new Event('change', { 'bubbles': true }))
+    // const videoStreamEl = document.querySelector('video-stream');
+    // const selectEl = document.querySelector('#selectVideoDevice');
+
+    // selectEl.onchange = async event => {
+    //   selectEl.disabled = true;
+    //   const deviceId = event.target.value;
+
+    //   await videoStreamEl.loadStream(deviceId);
+
+    //   const devices = await navigator.mediaDevices.enumerateDevices();
+    //   populateSelectElement(devices);
+    //   if (selectedtab.value != "basic") {
+    //     // It is on by default; stop rendering it if not visible.
+    //     stopBasicTab();
+    //   }
+
+    //   selectEl.disabled = false;
+    // };
+    // selectEl.dispatchEvent(new Event('change', { 'bubbles': true }))
   }
 </script>
 </html>
