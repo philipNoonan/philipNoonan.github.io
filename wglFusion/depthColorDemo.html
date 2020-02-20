@@ -182,10 +182,14 @@
     <button onclick="resetVolume()">Reset Volume</button>
     <button onclick="integrateClick()">Integrate Volume</button>
     <input type="radio" id="integrateRadio" checked>
+    <button onclick="clickPoseNet()">Load PoseNet</button>
+
   </div>
   <div>
     <button onclick="renderDepthClick()">Render Depth</button>
     <input type="radio" id="renderDepthRadio" checked>
+    <button onclick="renderColorClick()">Render Color</button>
+    <input type="radio" id="renderColorRadio">
     <button onclick="renderRefNormClick()">Render refNorm</button>
     <input type="radio" id="renderRefNormRadio">
     <button onclick="renderRefVertClick()">Render refVert</button>
@@ -202,32 +206,45 @@
         <video-stream></video-stream>
       </div>
   </div>
+  <script src="node_modules/gl-matrix/gl-matrix-min.js"></script>
+  <script src="node_modules/luqr/luqr.min.js"></script>
+  <script src="node_modules/mathjs/dist/math.js"></script>
+  <script src="node_modules/stats.js/build/stats.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet"></script>
+
+
+  <script src="src/createAndCompileShader.js"></script>
+  <script src="src/createComputeProgram.js"></script>
+  <script src="src/createRenderProgram.js"></script>
+  <script src="src/volume.js"></script>
+  <script src="src/frame.js"></script>
+  <script src="src/generateTexture.js"></script>
+  <script src="src/reset.js"></script>
+  <script src="depth-camera.js"></script>
+  <script src="src/track.js"></script>
+  <script src="src/render.js"></script>
+  <script src="src/renderSkeleton.js"></script>
+
+
+  <script src="shaders/depthToVert.js"></script>
+  <script src="shaders/vertToNorm.js"></script>
+  <script src="shaders/raycastVolume.js"></script>
+  <script src="shaders/integrateVolume.js"></script>
+  <script src="shaders/trackP2P.js"></script>
+  <script src="shaders/reduceP2P.js"></script>
+  <script src="shaders/trackP2V.js"></script>
+  <script src="shaders/reduceP2V.js"></script>
+  <script src="shaders/renderScreen.js"></script>
+  <script src="shaders/getClickedPoint.js"></script>
+  <script src="shaders/ploting.js"></script>
+  <script src="shaders/skeleton.js"></script>
+
 </body>
 
 
-<script src="node_modules/gl-matrix/gl-matrix-min.js"></script>
-<script src="node_modules/luqr/luqr.min.js"></script>
-<script src="node_modules/mathjs/dist/math.js"></script>
-<script src="node_modules/stats.js/build/stats.min.js"></script>
 
-
-<script src="src/createAndCompileShader.js"></script>
-<script src="src/createComputeProgram.js"></script>
-<script src="src/createRenderProgram.js"></script>
-<script src="src/generateTexture.js"></script>
-<script src="src/reset.js"></script>
-<script src="depth-camera.js"></script>
-<script src="src/depthToVert.js"></script>
-<script src="src/vertToNorm.js"></script>
-<script src="src/raycastVolume.js"></script>
-<script src="src/integrateVolume.js"></script>
-<script src="src/trackP2P.js"></script>
-<script src="src/reduceP2P.js"></script>
-<script src="src/trackP2V.js"></script>
-<script src="src/reduceP2V.js"></script>
-<script src="src/render.js"></script>
-<script src="src/getClickedPoint.js"></script>
-<script src="src/ploting.js"></script>
 
 
 
@@ -235,7 +252,6 @@
 
 
 <script>
-  let readAndShowDepthPixels = false;
   let error = window.console.error;
   window.console.error = (message, ...rest) => {
     let target = document.querySelector('#console');
@@ -246,6 +262,38 @@
     }
 
     target.innerHTML += `${message}<br>`;
+  }
+
+  function clickPoseNet() {
+    loadPoseNet();
+  }
+
+  async function loadPoseNet() {
+    net = await posenet.load({
+  architecture: 'ResNet50',
+  outputStride: 32,
+  inputResolution: { width: 257, height: 200 },
+  quantBytes: 2
+});
+
+
+    poseNetLoaded = 1;  
+
+  }
+
+  async function getBodyPose(image, net) {
+    var bPWorking = 0;
+    if (bodyPoseFound == 0 && bPWorking == 0)
+    {
+      bPWorking = 1;
+      bodyPoseFound = 0;
+      const bP = await net.estimateSinglePose(image, {flipHorizontal: false});
+      bodyPose = JSON.parse(JSON.stringify(bP));
+      bodyPoseFound = 1;
+      bpWorking = 0;
+    }
+    
+
   }
 
 
@@ -277,6 +325,11 @@
     renderDepthFlag = 1 - renderDepthFlag;
     let flag = document.getElementById("renderDepthRadio");
     flag.checked = renderDepthFlag == 1 ? true : false;
+  }
+  function renderColorClick() {
+    renderColorFlag = 1 - renderColorFlag;
+    let flag = document.getElementById("renderColorRadio");
+    flag.checked = renderColorFlag == 1 ? true : false;
   }
   function renderRefNormClick() {
     renderRefNormFlag = 1 - renderRefNormFlag;
@@ -323,15 +376,7 @@
     }
   }
 
-  function startBasicTab() {
-    const videoStreamEl = document.querySelector('video-stream');
-    videoStreamEl.play();    
-  }
 
-  function stopBasicTab() {
-    const videoStreamEl = document.querySelector('video-stream');
-    videoStreamEl.pause();
-  }
 
   const videoToggle = document.getElementById("show-video-toggle");
   
@@ -343,7 +388,10 @@
     mouseClickPos[0] = x;
     mouseClickPos[1] = y;
 
-}
+  }
+
+
+
 
 
   // UI stuff
@@ -369,6 +417,11 @@
   stats.domElement.style.cssText = 'position:absolute;top:0px;right:0px;';
   document.body.appendChild(stats.dom);
 
+  // vao
+  var vaoPlotting;
+  var vaoRender;
+  var vaoSkeleton;
+
   // programs
   var depthToVertProg;
   var vertToNormProg;
@@ -384,15 +437,22 @@
   var renderProgram;
 
   var plottingRenderProgram;
+  var renderSkeletonProgram;
 
   var resetFlag = 0;
   var integrateFlag = 1;
 
   var renderDepthFlag = 1;
+  var renderColorFlag = 0;
   var renderRefNormFlag = 0;
   var renderRefVertFlag = 0;
   var renderNormFlag = 0;
   var renderVertFlag = 0;
+
+  var net;
+  var poseNetLoaded = 0;
+  var bodyPoseFound = 0;
+  var bodyPose;
 
 
 
@@ -455,21 +515,38 @@
       this.gl = this._configureGLContext();
 
       this.frameAvailable = false;
+      this.frameAvailableColor = false;
 
-      this.video = this._createOffscreenVideo();
-      this.video.oncanplay = _ => { this.frameAvailable = true; }
-      this.video.addEventListener("play", this._frameLoop);
+      this.videoDepth = this._createOffscreenVideo();
+      this.videoDepth.oncanplay = _ => { this.frameAvailable = true; }
+      this.videoDepth.addEventListener("play", this._frameLoop);
 
       let hasTouchListeners = false;
       const onVideoTouchStart = _ => {
         hasTouchListeners = false;
         window.removeEventListener("touchstart", onVideoTouchStart, true);
-        this.video.play();
+        this.videoDepth.play();
       }
 
-      if (this.video && this.video.paused && !hasTouchListeners) {
+      if (this.videoDepth && this.videoDepth.paused && !hasTouchListeners) {
         hasTouchListeners = true;
         window.addEventListener("touchstart", onVideoTouchStart, true);
+      }
+
+      this.videoColor = this._createOffscreenVideo();
+      this.videoColor.oncanplay = _ => { this.frameAvailableColor = true; }
+      this.videoColor.addEventListener("play", this._frameLoopColor);
+
+      let hasTouchListenersColor = false;
+      const onVideoTouchStartColor = _ => {
+        hasTouchListenersColor = false;
+        window.removeEventListener("touchstart", onVideoTouchStartColor, true);
+        this.videoColor.playColor();
+      }
+
+      if (this.videoColor && this.videoColor.paused && !hasTouchListenersColor) {
+        hasTouchListenersColor = true;
+        window.addEventListener("touchstart", onVideoTouchStartColor, true);
       }
     }
 
@@ -483,472 +560,8 @@
       });
     }
     
-    _getClickedPoint() {
-      const gl = this.gl;
+    _frameLoopColor() {
 
-      resetVol(gl);
-
-      gl.useProgram(clickedPointProg);
-
-      gl.uniform2fv(gl.getUniformLocation(clickedPointProg, "clickedPoint"), mouseClickPos);
-      gl.bindImageTexture(0, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboClickedPoint);
-
-      gl.dispatchCompute(1, 1, 1);
-      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-      const clickedVert = new Float32Array(4);
-
-      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboClickedPoint);
-      gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, clickedVert);
-
-      initPose = glMatrix.mat4.create();
-      glMatrix.mat4.translate(initPose, initPose, [-clickedVert[0] + sliderVolumeLength.value / 2.0, -clickedVert[1] + sliderVolumeLength.value / 2.0, -clickedVert[2] + sliderVolumeLength.value / 2.0]);
-      pose = [...initPose];
-
-    }
-
-    
-
-    _uploadGraphPoints(_x, _y, _z) {
-      const gl = this.gl;
-
-      gl.useProgram(plottingBufferProg);
-
-      let scaledX = normalize(_x, initPose[12]+0.1, initPose[12]-0.1);
-      let scaledY = normalize(_y, initPose[13]+0.1, initPose[13]-0.1);
-      let scaledZ = normalize(_z, initPose[14]+0.1, initPose[14]-0.1);
-
-
-
-      gl.uniform4fv(gl.getUniformLocation(plottingBufferProg, "newData"), [scaledX, scaledY, scaledZ, 0.0]);
-      gl.uniform1i(gl.getUniformLocation(plottingBufferProg, "pingPong"), frameCounter % 2);
-
-      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboGraphX);
-      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, gl.ssboGraphY);
-      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 2, gl.ssboGraphZ);
-
-      gl.dispatchCompute(1, 1, 1);
-      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-    }
-
-
-
-
-
-
-
-
-
-
-
-    _resultToMatrix(_result, _delta)
-    {
-      // from https://github.com/g-truc/glm/tree/master/glm/gtx/euler_angles.inl
-      let c1 = Math.cos(-_result[3]);
-      let c2 = Math.cos(-_result[4]);
-      let c3 = Math.cos(-_result[5]);
-      let s1 = Math.sin(-_result[3]);
-      let s2 = Math.sin(-_result[4]);
-      let s3 = Math.sin(-_result[5]);
-      
-      _delta[0] = c2 * c3;
-      _delta[1] =-c1 * s3 + s1 * s2 * c3;
-      _delta[2] = s1 * s3 + c1 * s2 * c3;
-      _delta[3] = 0;
-      _delta[4] = c2 * s3;
-      _delta[5] = c1 * c3 + s1 * s2 * s3;
-      _delta[6] =-s1 * c3 + c1 * s2 * s3;
-      _delta[7] = 0;
-      _delta[8] =-s2;
-      _delta[9] = s1 * c2;
-      _delta[10] = c1 * c2;
-      _delta[11] = 0;
-      _delta[12] = _result[0];
-      _delta[13] = _result[1];
-      _delta[14] = _result[2];
-      _delta[15] = 1;
-    }
-
-    _twistMatrix(_result) {
-      let sqrMat = [[0.0, _result[2], _result[1], _result[3]],
-                 [_result[2], 0.0, _result[0], _result[4]],
-                 [-_result[1], _result[1], 0.0, _result[5]],
-                 [0.0, 0.0, 0.0, 0.0]];
-
-      return sqrMat;
-    }
-
-
-    _solve(_A, _b, _result) {
-
-      let A = Array.from(_A);
-      let b = Array.from(_b);
-      let folded_A = luqr.fold(A, 6);
-      let res = Array(6);
-      res = luqr.solve(folded_A,b);
-      if (res != null)
-      {
-        for (let i = 0; i < res.length; i++)
-        {
-          _result[i] = res[i];
-        }
-      }
-    }
-
-    _getReduction(_A, _b, _icpData) {
-      const gl = this.gl;
-
-      const outputReductionData = new Float32Array(8 * 32);
-
-      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboReductionOutput);
-      gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, outputReductionData);
-
-      for (let row = 1; row < 8; row++)
-		  {
-			  for (let col = 0; col < 32; col++)
-			  {
-				  outputReductionData[col + 0 * 32] += outputReductionData[col + row * 32];
-			  }
-		  }
-
-      /*
-      vector b
-      | 1 |
-      | 2 |
-      | 3 |
-      | 4 |
-      | 5 |
-      | 6 |
-      and
-      matrix a
-      | 7  | 8  | 9  | 10 | 11 | 12 |
-      | 8  | 13 | 14 | 15 | 16 | 17 |
-      | 9  | 14 | 18 | 19 | 20 | 21 |
-      | 10 | 15 | 19 | 22 | 23 | 24 |
-      | 11 | 16 | 20 | 23 | 25 | 26 |
-      | 12 | 17 | 21 | 24 | 26 | 27 |
-      AE = sqrt( [0] / [28] )
-      count = [28]
-      */
-
-      for (let i = 1; i <= 6; i++)
-      {
-        _b[i - 1] = outputReductionData[i];
-      }
-
-      var shift = 7;
-      for (let i = 0; i < 6; ++i)
-      {
-        for (let j = i; j < 6; ++j)
-        {
-          let value = outputReductionData[shift++];
-
-          _A[j * 6 + i] = _A[i * 6 + j] = value;
-        }
-      }
-
-      _icpData.AE = Math.sqrt(outputReductionData[0] / outputReductionData[28]);
-      _icpData.icpCount = outputReductionData[28];
-    }
-
-
-    _reduceP2P() {
-      const gl = this.gl;
-
-      gl.useProgram(p2pReduceProg);
-
-      gl.uniform2fv(gl.getUniformLocation(p2pReduceProg, "imSize"), imageSize);
-
-      // buffers
-      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboReduction);
-      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, gl.ssboReductionOutput);
-
-
-      gl.dispatchCompute(8, 1, 1);
-      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-    }
-
-    _trackP2P(_T, _level) {
-      const gl = this.gl;
-
-      gl.useProgram(p2pTrackProg);
-
-      let projRef = glMatrix.mat4.create();
-      let invPose = glMatrix.mat4.create();
-      glMatrix.mat4.invert(invPose, pose);
-
-      glMatrix.mat4.mul(projRef, K, invPose);
-
-      // buffers
-      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboReduction);
-      // uniforms 
-      gl.uniformMatrix4fv(gl.getUniformLocation(p2pTrackProg, "T"), false, _T);
-      gl.uniformMatrix4fv(gl.getUniformLocation(p2pTrackProg, "view"), false, projRef);
-
-      gl.uniform1f(gl.getUniformLocation(p2pTrackProg, "distThresh"), 0.01);
-      gl.uniform1f(gl.getUniformLocation(p2pTrackProg, "normThresh"), 0.9);
-      gl.uniform1i(gl.getUniformLocation(p2pTrackProg, "mip"), _level);
-      gl.uniform4fv(gl.getUniformLocation(p2pTrackProg, "cam"), camPam);
-
-      // textures
-      gl.bindImageTexture(0, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-      gl.bindImageTexture(1, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-      gl.bindImageTexture(2, gl.refVertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-      gl.bindImageTexture(3, gl.refNormal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-      gl.bindImageTexture(4, gl.render_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA8UI);
-
-      gl.dispatchCompute(this.video.width / 32, this.video.height / 32, 1);
-      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-    }
-
-    _reduceP2V() {
-      const gl = this.gl;
-
-      gl.useProgram(p2vReduceProg);
-
-      gl.uniform2fv(gl.getUniformLocation(p2vReduceProg, "imSize"), imageSize);
-
-      // buffers
-      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboReduction);
-      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, gl.ssboReductionOutput);
-
-      gl.dispatchCompute(8, 1, 1);
-      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-    }
-
-    _trackP2V(_T, _level) {
-      const gl = this.gl;
-
-      gl.useProgram(p2vTrackProg);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_3D, gl.volume_texture);
-
-      gl.bindImageTexture(0, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-      gl.bindImageTexture(1, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-      gl.bindImageTexture(2, gl.refVertex_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
-      gl.bindImageTexture(3, gl.render_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA8UI);
-
-      gl.uniformMatrix4fv(gl.getUniformLocation(p2vTrackProg, "T"), false, _T);
-      gl.uniform1f(gl.getUniformLocation(p2vTrackProg, "volDim"), sliderVolumeLength.value);
-      gl.uniform1f(gl.getUniformLocation(p2vTrackProg, "volSize"), volSize[0]);
-      gl.uniform1i(gl.getUniformLocation(p2vTrackProg, "mip"), _level);
-
-      gl.dispatchCompute(this.video.width / 32, this.video.height / 32, 1);
-      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-    }
-
-    
-    _integrateVolume(_iFlag, _rFlag) {
-      const gl = this.gl;
-
-      gl.useProgram(integrateProg);
-
-      let invPose = glMatrix.mat4.create();
-      glMatrix.mat4.invert(invPose, pose);
-
-      gl.uniform4fv(gl.getUniformLocation(integrateProg, "cam"), camPam);
-      gl.uniformMatrix4fv(gl.getUniformLocation(integrateProg, "invT"), false, invPose);
-
-      gl.uniform1i(gl.getUniformLocation(integrateProg, "integrateFlag"), _iFlag);
-      gl.uniform1i(gl.getUniformLocation(integrateProg, "resetFlag"), _rFlag);
-
-      gl.uniform1i(gl.getUniformLocation(integrateProg, "p2p"), 1);
-      gl.uniform1i(gl.getUniformLocation(integrateProg, "p2v"), 0);
-
-      gl.uniform1f(gl.getUniformLocation(integrateProg, "maxWeight"), 100.0);
-      gl.uniform1f(gl.getUniformLocation(integrateProg, "volDim"), sliderVolumeLength.value);
-      gl.uniform1f(gl.getUniformLocation(integrateProg, "volSize"), volSize[0]);
-
-
-      // textures
-      gl.bindImageTexture(0, gl.volume_texture, 0, false, 0, gl.READ_WRITE, gl.R32F);
-      gl.bindImageTexture(1, gl.volumeWeight_texture, 0, false, 0, gl.READ_WRITE, gl.R32F);
-
-      gl.bindImageTexture(2, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-      gl.bindImageTexture(3, gl.render_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
-      gl.bindImageTexture(4, gl.normal_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
-
-      gl.dispatchCompute(volSize[0] / 32, volSize[1] / 32, 1);
-      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-      if (resetFlag == 1)
-      {
-        resetFlag = 0;
-        integrateFlag = 1;
-      }
-
-    }
-
-    _raycastVolume() {
-      const gl = this.gl;
-      gl.useProgram(raycastProg);
-
-      gl.bindImageTexture(0, gl.volume_texture, 0, false, 0, gl.READ_ONLY, gl.R32F);
-      gl.bindImageTexture(1, gl.refVertex_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
-      gl.bindImageTexture(2, gl.refNormal_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
-      
-      let view = glMatrix.mat4.create();
-      glMatrix.mat4.mul(view, pose, invK);
-
-      let dMin = -sliderVolumeLength.value / 20.0;
-      let dMax = sliderVolumeLength.value / 10.0;
-
-      let step = sliderVolumeLength.value / volSize[0];
-
-      gl.uniformMatrix4fv(gl.getUniformLocation(raycastProg, "view"), false, view);
-      gl.uniform1f(gl.getUniformLocation(raycastProg, "step"), step);
-      gl.uniform1f(gl.getUniformLocation(raycastProg, "largeStep"), 0.5 * 0.75);
-      gl.uniform1f(gl.getUniformLocation(raycastProg, "nearPlane"), 0.01);
-      gl.uniform1f(gl.getUniformLocation(raycastProg, "farPlane"), 3.0);
-      gl.uniform1f(gl.getUniformLocation(raycastProg, "volDim"), sliderVolumeLength.value);
-      gl.uniform1f(gl.getUniformLocation(raycastProg, "volSize"), volSize[0]);
-
-      gl.dispatchCompute(this.video.width / 32, this.video.height / 32, 1);
-      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-    }
-
-    
-    _generateVertNorms() {
-      const gl = this.gl;
-
-      gl.useProgram(depthToVertProg);
-      gl.bindImageTexture(0, gl.depth_texture, 0, false, 0, gl.READ_ONLY, gl.R32F)
-      gl.bindImageTexture(1, gl.vertex_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F)
-
-      // bind uniforms
-      gl.uniformMatrix4fv(gl.getUniformLocation(depthToVertProg, "invK"), false, invK);
-      gl.uniform1f(gl.getUniformLocation(depthToVertProg, "minDepth"), 0.1);
-      gl.uniform1f(gl.getUniformLocation(depthToVertProg, "maxDepth"), 3.0);
-      gl.uniform2fv(gl.getUniformLocation(depthToVertProg, "bottomLeft"), [0, 0]);
-      gl.uniform2fv(gl.getUniformLocation(depthToVertProg, "topRight"), imageSize);
-
-      gl.dispatchCompute(this.video.width / 32, this.video.height / 32, 1);
-      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-
-      gl.useProgram(vertToNormProg);
-      gl.bindImageTexture(0, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-      gl.bindImageTexture(1, gl.normal_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F)
-
-      gl.dispatchCompute(this.video.width / 32, this.video.height / 32, 1);
-      gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-    }
-
-    _calcPoseP2P() {
-      const gl = this.gl;
-
-      if (resetFlag == 0) {
-        this._generateVertNorms();
-        this._raycastVolume();
-        
-        var T = glMatrix.mat4.create();
-
-        T = [...pose];
-        var level = 0;
-
-        var A = new Float32Array(36); // 6 * 6
-        var b = new Float32Array(6);
-        var result = new Float32Array(6);
-        var icpData = {AE:0.0, icpCount:0};
-
-        for (let i = 0; i < 2; i++)
-        {
-          var delta = glMatrix.mat4.create();
-          this._trackP2P(T, level);
-          this._reduceP2P();
-          this._getReduction(A, b, icpData);
-          this._solve(A, b, result);
-          this._resultToMatrix(result, delta);
-
-          glMatrix.mat4.mul(T, delta, T);
-        }
-        pose = [...T];
-      }
-      else {
-        this._getClickedPoint();
-      }
-      this._integrateVolume(integrateFlag, resetFlag);
-    }
-
-    _calcPoseP2V() {
-      const gl = this.gl;
-
-      if (resetFlag == 0) {
-        this._generateVertNorms();
-        this._raycastVolume();
-
-        var T = glMatrix.mat4.create();
-
-        T = [...pose];
-        var level = 0;
-
-        var A = new Float32Array(36); // 6 * 6
-        var b = new Float32Array(6);
-        var result = new Float32Array(6);
-        var resultPrev = new Float32Array(6);
-
-        var icpData = {AE:0.0, icpCount:0};
-
-        var tracked = false;
-
-
-        for (let i = 0; i < 2; i++)
-        {
-          var twistedResult = this._twistMatrix(result);
-          let tempT = math.flatten(math.expm(twistedResult));
-
-          var currT = glMatrix.mat4.create();
-          
-          for (var iter=0; iter<tempT.length; iter++) currT[iter] = tempT[iter];      
-
-          this._trackP2V(currT, level);
-          this._reduceP2V();
-          this._getReduction(A, b, icpData);
-
-          let scaling = 1.0 / (Math.max(...A) > 0.0 ? Math.max(...A) : 1.0);
-
-          for (let iter = 0; iter < 36; iter++) A[iter] *= scaling;
-          for (let iter = 0; iter < 6; iter++) b[iter] *= scaling;
-
-          //A = A + (i) <-- need to use some mathjs matrix multiplacation stuff here since A is 6x6
-
-          var deltaResult = new Float32Array(6);
-
-          this._solve(A, b, deltaResult);
-          var change = [0, 0, 0, 0, 0, 0];
-
-          for (let iter = 0; iter < 6; iter++) result[iter] -= deltaResult[iter];
-          for (let iter = 0; iter < 6; iter++) change[iter] = result[iter] - deltaResult[iter];
-
-          var Cnorm = math.norm(change);
-
-          resultPrev = result;
-
-          if (Cnorm < 1e-4 && icpData.AE != 0.0) {
-            tracked = true;
-            break;
-          }
-          else {
-            tracked = false;
-          }
-
-          //this._resultToMatrix(result, delta);
-          //glMatrix.mat4.mul(T, delta, T);
-        }
-        //pose = [...T];
-
-
-      }
-      else {
-        this._getClickedPoint();
-      }
-      this._integrateVolume(integrateFlag, resetFlag);
     }
 
     _frameLoop() {
@@ -958,94 +571,79 @@
       let c = this.shadowRoot.getElementById("canvasGL");
 
 
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
+
 
       if (this.frameAvailable) {
         // Upload the video frame to texture.
-		    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, this.video);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
+		    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, this.videoDepth);
+      }
+
+      if (this.frameAvailableColor) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+		    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, this.videoColor);
+      }
+
+      if (poseNetLoaded == 1) {
+        getBodyPose(this.videoColor, net);
+        //console.log(bodyPose)
+
+
+        
 
 
       }
 
+ 
+      
 
-
-
-      this._calcPoseP2P();
-
+      calcPoseP2P(gl, imageSize[0], imageSize[1]);
       //this._calcPoseP2V();
 
-      this._uploadGraphPoints(pose[12], pose[13], pose[14]);
+      uploadGraphPoints(gl, pose[12], pose[13], pose[14]);
 
-      gl.viewport(0, 0, c.width, 240);
+      render(gl, c.width, c.height);
 
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      if (bodyPoseFound == 1)
+      {
+        let skelePoints = [];
 
-      gl.useProgram(plottingRenderProgram);
-      gl.uniform2fv(gl.getUniformLocation(plottingRenderProgram, "imageSize"), [1024.0, 240.0]);
+        const adjacentKeyPoints =
+        posenet.getAdjacentKeyPoints(bodyPose.keypoints, 0.001);
+        // // adjacentKeyPoints.forEach((keypoints) => {
+        // //   skelePoints.push(keypoints[0].position.x);
+        // //   skelePoints.push(keypoints[0].position.y);
+        // //   //skelePoints.push(keypoints[1].position[0]);
+        // //   //skelePoints.push(keypoints[1].position[1]);
+        // // });
+        //console.log(bodyPose);
 
-      gl.uniform1i(gl.getUniformLocation(plottingRenderProgram, "axis"), 0);
-      gl.drawArrays(gl.POINTS, 0, 1024);     
+        for (let iter = 0; iter < bodyPose.keypoints.length; iter++)
+        {
+          skelePoints.push(bodyPose.keypoints[iter].position.x);
+          skelePoints.push(bodyPose.keypoints[iter].position.y);
+        }
+ 
+        bodyPoseFound = 0;
 
-      gl.uniform1i(gl.getUniformLocation(plottingRenderProgram, "axis"), 1);
-      gl.drawArrays(gl.POINTS, 0, 1024);
+        gl.useProgram(renderSkeletonProgram);
+        gl.bindVertexArray(gl.vaoSkeleton);
+        gl.uniform2fv(gl.getUniformLocation(renderSkeletonProgram, "imageSize"), imageSize);
+        gl.viewport(0, 240, c.width / 2.0, c.height - 240);
 
-      gl.uniform1i(gl.getUniformLocation(plottingRenderProgram, "axis"), 2);
-      gl.drawArrays(gl.POINTS, 0, 1024);
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.skeleton_buffer);
 
+        let sp = Float32Array.from(skelePoints);
 
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, sp, 0, skelePoints.length);
 
-      gl.viewport(0, 240, c.width / 2.0, c.height - 240);
+        gl.drawArrays(gl.POINTS, 0, skelePoints.length);     
 
-		  gl.useProgram(renderProgram);
+        gl.bindVertexArray(null);
 
-      let renderOpts = renderDepthFlag << 0 | 
-                      renderRefNormFlag << 1 |
-                      renderRefVertFlag << 2 |
-                      renderNormFlag << 3 |
-                      renderVertFlag << 4;
-
-      gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
-      gl.uniform2fv(gl.getUniformLocation(renderProgram, "imageSize"), imageSize);
-
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
-      gl.bindImageTexture(1, gl.refNormal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-      gl.bindImageTexture(2, gl.refVertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-      gl.bindImageTexture(3, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-      gl.bindImageTexture(4, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
-      gl.vertexAttribPointer(gl.vertex_location, 2, gl.FLOAT, false, 0, 0);
-
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.index_buffer);
-      gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-
-
-      gl.viewport(c.width / 2.0, 240, c.width / 2.0, c.height - 240);
-
-      renderOpts = 0 << 0 | 
-                       1 << 1 |
-                       0 << 2 |
-                       0 << 3 |
-                       0 << 4;
-
-      gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
-      gl.uniform2fv(gl.getUniformLocation(renderProgram, "imageSize"), imageSize);
-
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
-      gl.bindImageTexture(1, gl.refNormal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-      gl.bindImageTexture(2, gl.refVertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-      gl.bindImageTexture(3, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-      gl.bindImageTexture(4, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
-      gl.vertexAttribPointer(gl.vertex_location, 2, gl.FLOAT, false, 0, 0);
-
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.index_buffer);
-      gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-
+      }
 
       frameCounter++;
       stats.end();
@@ -1053,14 +651,6 @@
         window.requestAnimationFrame(this._frameLoop);
     }
 
-    pause() {
-      this.paused = true;
-    }
-
-    play() {
-      this.paused = false;
-      window.requestAnimationFrame(this._frameLoop);
-    }
 
 
 
@@ -1098,13 +688,17 @@
       // VERTEX FRAGMENT SHADERS
       plottingRenderProgram = createRenderProgram(gl, plottingVertexShaderSource, plottingFragmentShaderSource);
       renderProgram = createRenderProgram(gl, vertexShaderSource, fragmentShaderSource);
+      renderSkeletonProgram = createRenderProgram(gl, skeletonVertexShaderSource, skeletonFragmentShaderSource);
+
+            
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
       // BINDING BUFFERS
       gl.useProgram(plottingRenderProgram);
+      vaoPlotting = gl.createVertexArray();
+      gl.bindVertexArray(vaoPlotting);
 
-
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
       let emptyGraphPoints = new Float32Array(2*1024);
       var ssboGraphX = gl.createBuffer();
@@ -1128,9 +722,13 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphZ);
       gl.enableVertexAttribArray(3);
       gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 0, 0);
+      gl.bindVertexArray(null);
 
 
       gl.useProgram(renderProgram);
+      vaoRender = gl.createVertexArray();
+      gl.bindVertexArray(vaoRender);
+
       var vertex_location = gl.getAttribLocation(renderProgram, "v");
       gl.enableVertexAttribArray(vertex_location);
 
@@ -1142,6 +740,11 @@
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, index_buffer);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0,1,2,0,2,3]), gl.STATIC_DRAW);
 
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+      gl.bindVertexArray(null);
 
       let arr = new Float32Array(imageSize[0] * imageSize[1] * 8);// width * height * sizeof reduType struct
       var ssboReduction = gl.createBuffer();
@@ -1159,7 +762,23 @@
       gl.bufferData(gl.SHADER_STORAGE_BUFFER, arrClicked, gl.DYNAMIC_COPY);
 
 
+      gl.useProgram(renderSkeletonProgram);
+      vaoSkeleton = gl.createVertexArray();
+      gl.bindVertexArray(vaoSkeleton);
+
+      let arrSkele = new Float32Array(17 * 2);
+      var skeleton_buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, skeleton_buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, arrSkele, gl.DYNAMIC_COPY);
+
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+      gl.bindVertexArray(null);
+
       var depth_texture = generateTexture(gl, gl.TEXTURE_2D, gl.R32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var color_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+
       var volume_texture = generateTexture(gl, gl.TEXTURE_3D, gl.R32F, 1, volSize[0], volSize[1], volSize[2], gl.NEAREST, gl.NEAREST);
       var volumeWeight_texture = generateTexture(gl, gl.TEXTURE_3D, gl.R32F, 1, volSize[0], volSize[1], volSize[2], gl.NEAREST, gl.NEAREST);
 
@@ -1190,6 +809,8 @@
       gl.vertex_location = vertex_location;
       gl.index_buffer = index_buffer;
 
+      gl.skeleton_buffer = skeleton_buffer;
+
       gl.ssboReduction = ssboReduction;
       gl.ssboReductionOutput = ssboReductionOutput;
       gl.ssboClickedPoint = ssboClickedPoint;
@@ -1198,7 +819,12 @@
       gl.ssboGraphY = ssboGraphY;
       gl.ssboGraphZ = ssboGraphZ;
 
+      gl.vaoPlotting = vaoPlotting;
+      gl.vaoRender = vaoRender;
+      gl.vaoSkeleton = vaoSkeleton;
+
       gl.depth_texture = depth_texture;
+      gl.color_texture = color_texture;
       gl.vertex_texture = vertex_texture;
       gl.normal_texture = normal_texture;
       gl.volume_texture = volume_texture;      
@@ -1219,7 +845,7 @@
       stopVideo(videos.color);
 
       // If the item in drop-down list is selected, use it.
-      const getUserMedia = () => {
+      const getUserMediaDepth = () => {
         // add ?allow=all to URL to allow listing all devices (incl. those not supporting depth).
         if (!deviceId && (new URL(window.location)).searchParams.get("allow") !== "all") {
           return DepthCamera.getDepthStream();
@@ -1231,19 +857,46 @@
           }
         }
 
-        return navigator.mediaDevices.getUserMedia(constraints);
+        return navigator.mediaDevices.getUserMediaDepth(constraints);
+      }
+
+      const getUserMediaColor = () => {
+        // add ?allow=all to URL to allow listing all devices (incl. those not supporting depth).
+        if (!deviceId && (new URL(window.location)).searchParams.get("allow") !== "all") {
+          return DepthCamera.getColorStream();
+        }
+
+        const constraints = {
+          video: {
+            deviceId: deviceId ? { exact: deviceId } : {}
+          }
+        }
+
+        return navigator.mediaDevices.getUserMediaColor(constraints);
       }
 
       try {
-        const stream = await getUserMedia();
-        this.video.srcObject = stream;
-        videos.depth = this.video;
+        const streamDepth = await getUserMediaDepth();
+        this.videoDepth.srcObject = streamDepth;
+        videos.depth = this.videoDepth;
+
+        const streamColor = await getUserMediaColor();
+        this.videoColor.srcObject = streamColor;
+        videos.color = this.videoColor;
+
+        //videos.color = this.videoDepth;
 
         // Chrome, starting with version 59, implements getSettings() API.
-        const track = stream.getVideoTracks()[0];
-        if (track.getSettings) {
-          this.depthDeviceId = track.getSettings().deviceId;
+        const tracksDepth = streamDepth.getVideoTracks()[0];
+        if (tracksDepth.getSettings) {
+          this.depthDeviceId = tracksDepth.getSettings().deviceId;
         }
+
+        const tracksColor = streamColor.getVideoTracks()[0];
+        if (tracksColor.getSettings) {
+          this.colorDeviceId = tracksColor.getSettings().deviceId;
+        }
+
       } catch (err) {
         console.error(err);
       }
@@ -1305,7 +958,6 @@
         // It is on by default; stop rendering it if not visible.
         stopBasicTab();
       }
-      window[selectedtab.dataset.ontabon]();
 
       selectEl.disabled = false;
     };
