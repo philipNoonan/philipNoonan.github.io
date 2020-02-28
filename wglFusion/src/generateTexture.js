@@ -16,19 +16,25 @@ self.generateTexture = function (gl, type, format, levels, width, height, depth,
 
   var texture = gl.createTexture();
 
-  gl.bindTexture(type, texture);
 
   switch (type) {
     case gl.TEXTURE_1D:
+      gl.bindTexture(type, texture);
       gl.texStorage1D(type, levels, format, width);
       break;
     case gl.TEXTURE_2D:
-    gl.texStorage2D(type, levels, format, width, height);
+      gl.bindTexture(type, texture);
+      gl.texStorage2D(type, levels, format, width, height);
     break;
     case gl.TEXTURE_3D:
+      gl.bindTexture(type, texture);
       gl.texStorage3D(type, levels, format, width, height, depth);
       gl.texParameteri(type, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
-
+    break;
+    case 'depth':
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, width, height, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+      type = gl.TEXTURE_2D;
     break;
     default:
       out.displayError("Invalid type of shader in createAndCompileShader()");

@@ -7,7 +7,7 @@
     let scaledZ = normalize(_z, initPose[14]+0.1, initPose[14]-0.1);
 
     gl.uniform4fv(gl.getUniformLocation(plottingBufferProg, "newData"), [scaledX, scaledY, scaledZ, 0.0]);
-    gl.uniform1i(gl.getUniformLocation(plottingBufferProg, "pingPong"), frameCounter % 2);
+    gl.uniform1i(gl.getUniformLocation(plottingBufferProg, "pingPong"), gl.frameCounter % 2);
 
     gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboGraphX);
     gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, gl.ssboGraphY);
@@ -52,13 +52,34 @@ function render(gl, width, height) {
     gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
     gl.uniform2fv(gl.getUniformLocation(renderProgram, "imageSize"), imageSize);
 
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "depth"), 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
-    gl.bindImageTexture(0, gl.color_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
-    gl.bindImageTexture(1, gl.refNormal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-    gl.bindImageTexture(2, gl.refVertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-    gl.bindImageTexture(3, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-    gl.bindImageTexture(4, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "colorMap"), 1);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "refNormalMap"), 2);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, gl.refNormal_texture);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "refVertexMap"), 3);
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, gl.refVertex_texture);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "normalMap"), 4);
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, gl.normal_texture);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "vertexMap"), 5);
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, gl.vertex_texture);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "indexMap"), 6);
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_2D, gl.indexMap_texture);
+
+    // gl.bindImageTexture(0, gl.color_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
+    // gl.bindImageTexture(1, gl.refNormal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+    // gl.bindImageTexture(2, gl.refVertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+    // gl.bindImageTexture(3, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+    // gl.bindImageTexture(4, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+    // gl.bindImageTexture(5, gl.indexMap_texture, 0, false, 0, gl.READ_ONLY, gl.R32F);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
     gl.vertexAttribPointer(gl.vertex_location, 2, gl.FLOAT, false, 0, 0);
@@ -70,21 +91,43 @@ function render(gl, width, height) {
 
     renderOpts = 0 << 0 | 
                        0 << 1 |
-                       1 << 2 |
-                       0 << 3 |
+                       0 << 2 |
+                       1 << 3 |
                        0 << 4 |
                        0 << 5;
 
     gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
     gl.uniform2fv(gl.getUniformLocation(renderProgram, "imageSize"), imageSize);
 
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "depth"), 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
-    gl.bindImageTexture(0, gl.color_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
-    gl.bindImageTexture(1, gl.refNormal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-    gl.bindImageTexture(2, gl.refVertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-    gl.bindImageTexture(3, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
-    gl.bindImageTexture(4, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "colorMap"), 1);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "refNormalMap"), 2);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, gl.refNormal_texture);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "refVertexMap"), 3);
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, gl.refVertex_texture);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "normalMap"), 4);
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, gl.normal_texture);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "vertexMap"), 5);
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, gl.vertex_texture);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "indexMap"), 6);
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_2D, gl.indexMap_texture);
+
+
+    // gl.bindImageTexture(0, gl.color_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
+    // gl.bindImageTexture(1, gl.refNormal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
+    // gl.bindImageTexture(2, gl.refVertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
+    // gl.bindImageTexture(3, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
+    // gl.bindImageTexture(4, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
+    // gl.bindImageTexture(5, gl.indexMap_texture, 0, false, 0, gl.READ_ONLY, gl.R32F);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
     gl.vertexAttribPointer(gl.vertex_location, 2, gl.FLOAT, false, 0, 0);

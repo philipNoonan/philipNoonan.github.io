@@ -10,6 +10,11 @@ layout(binding = 1, rgba32f) readonly uniform highp image2D normalMap;
 layout(binding = 2, rgba32f) writeonly uniform highp image2D SDFImage;
 layout(binding = 3, rgba8) writeonly uniform highp image2D trackImage;
 
+uniform mat4 T;
+uniform float volDim;
+uniform float volSize; 
+uniform int mip;
+
 struct reduSDFType
 {
     int result;
@@ -20,13 +25,10 @@ struct reduSDFType
 
 layout(std430, binding = 0) buffer TrackData
 {
-    reduSDFType trackOutput [];
-};
+    reduSDFType data[];
+} trackOutput;
 
-uniform mat4 T;
-uniform float volDim;
-uniform float volSize; 
-uniform int mip;
+
 
 bool invalidGradient(float inputSDF)
 {
@@ -114,32 +116,34 @@ void main()
 {
 	uint numberOfCameras = 1u;
     uvec2 pix = gl_GlobalInvocationID.xy;
-    uvec2 imSize = uvec2(imageSize(trackImage));
+    ivec2 imSize = imageSize(vertexMap);
 
     for (uint camera = 0u; camera < numberOfCameras; camera++)
     { 
         imageStore(SDFImage, ivec2(pix), vec4(0.0, 0.0f, 0.0, 0.0));
         imageStore(trackImage, ivec2(pix), vec4(0.0f, 0.0, 0.0, 1.0));
 
-        uint offset = uint(camera * imSize.x * imSize.y) + ((pix.y * imSize.x) + pix.x);
-        trackOutput[offset].result = -4;
-
+        uint offset = uint(camera * uint(imSize.x) * uint(imSize.y)) + ((pix.y * uint(imSize.x)) + pix.x);
+        trackOutput.data[offset].result = -4;
 
         //if (pix.x >= 0 && pix.x < imageSize.x - 1 && pix.y >= 0 && pix.y < imageSize.y)
-        if (all(greaterThanEqual(pix, uvec2(0u))) && all(lessThan(pix, imSize)))
+        if (all(greaterThanEqual(pix, uvec2(0u))) && all(lessThan(pix, uvec2(imSize))))
         {
             vec4 normals = imageLoad(normalMap, ivec2(pix));
 
             if (normals.x == 2.0f)
             {
-                trackOutput[offset].result = -4;
+                trackOutput.data[offset].result = -4;
                 imageStore(trackImage, ivec2(pix), vec4(0, 0, 0, 0));
             }
             else
             {
+
                 vec4 cameraPoint = imageLoad(vertexMap, ivec2(pix));
                 vec4 projectedVertex = T * vec4(cameraPoint.xyz, 1.0f);
 
+
+                
                 bool isInterpolated;
   
                 // cvp is in texel space 0 - 127
@@ -149,7 +153,7 @@ void main()
                 {
                     //imageStore(testImage, ivec2(pix), vec4(0.5f));
                     imageStore(trackImage, ivec2(pix), vec4(0.0f, 0.0f, 1.0, 1.0f));
-                    trackOutput[offset].result = -4;
+                    trackOutput.data[offset].result = -4;
 
                     continue;
                 }
@@ -162,13 +166,13 @@ void main()
                 if (dot(dSDF_dx, rotatedNormal) < 0.8 && !any(equal(dSDF_dx, vec3(0.0f))))
                 {
                     imageStore(trackImage, ivec2(pix), vec4(1.0f, 1.0f, 0, 1.0f));
-                    trackOutput[offset].result = -4;
+                    trackOutput.data[offset].result = -4;
                     continue;
                 }
 
                 if (any(equal(dSDF_dx, vec3(-2.0f))))
                 {
-                    trackOutput[offset].result = -4;
+                    trackOutput.data[offset].result = -4;
                     imageStore(trackImage, ivec2(pix), vec4(1.0f, 0.0f, 0, 1.0f));
                     continue;
                 }
@@ -198,11 +202,16 @@ void main()
 
                     float huber = absD < 0.003f ? 1.0f : 0.003f / absD;
 
-                    trackOutput[offset].result = 1;
+                    trackOutput.data[offset].result = 1;
 
-                    trackOutput[offset].h = huber;
-                    trackOutput[offset].D = D;
-                    trackOutput[offset].J = J;
+                    trackOutput.data[offset].h = huber;
+                    trackOutput.data[offset].D = D;
+                    trackOutput.data[offset].J[0] = J[0];
+                    trackOutput.data[offset].J[1] = J[1];
+                    trackOutput.data[offset].J[2] = J[2];
+                    trackOutput.data[offset].J[3] = J[3];
+                    trackOutput.data[offset].J[4] = J[4];
+                    trackOutput.data[offset].J[5] = J[5];
 
                     imageStore(trackImage, ivec2(pix), vec4(0.5f, 0.5f, 0.5f, 1.0f));             
                 }
@@ -211,15 +220,15 @@ void main()
                     imageStore(trackImage, ivec2(pix), vec4(0.0, 0.0, 0.0f, 0.0f));
 
                     
-                    trackOutput[offset].result = -4;
-                    trackOutput[offset].h = 0.0f;
-                    trackOutput[offset].D = 0.0f;
-                    trackOutput[offset].J[0] = 0.0f;
-                    trackOutput[offset].J[1] = 0.0f;
-                    trackOutput[offset].J[2] = 0.0f;
-                    trackOutput[offset].J[3] = 0.0f;
-                    trackOutput[offset].J[4] = 0.0f;
-                    trackOutput[offset].J[5] = 0.0f;
+                    trackOutput.data[offset].result = -4;
+                    trackOutput.data[offset].h = 0.0f;
+                    trackOutput.data[offset].D = 0.0f;
+                    trackOutput.data[offset].J[0] = 0.0f;
+                    trackOutput.data[offset].J[1] = 0.0f;
+                    trackOutput.data[offset].J[2] = 0.0f;
+                    trackOutput.data[offset].J[3] = 0.0f;
+                    trackOutput.data[offset].J[4] = 0.0f;
+                    trackOutput.data[offset].J[5] = 0.0f;
 
                 }
             }   

@@ -34,6 +34,17 @@ function twistMatrix(_result) {
   return sqrMat;
 }
 
+function twist(xi) {
+
+  var M = [
+    [0.0,    xi[2], -xi[1], 0.0], 
+    [-xi[2],  0.0,    xi[0], 0.0],
+    [xi[1], -xi[0],  0.0,   0.0],
+    [xi[3],  xi[4],  xi[5], 0.0]
+  ];
+  return M;
+}
+
 function solve(_A, _b, _result) {
   let A = Array.from(_A);
   let b = Array.from(_b);
@@ -99,7 +110,7 @@ function reduceP2P(gl) {
     gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboReduction);
     gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, gl.ssboReductionOutput);
     gl.dispatchCompute(8, 1, 1);
-    gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    gl.memoryBarrier(gl.SHADER_STORAGE_BARRIER_BIT);
 }
 
 function trackP2P(gl, width, height, _T, _level) {
@@ -139,14 +150,19 @@ function reduceP2V(gl) {
 
 function trackP2V(gl, width, height, _T, _level) {
     gl.useProgram(p2vTrackProg);
+    gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboReduction);
+
+    gl.uniform1i(gl.getUniformLocation(p2vTrackProg, "volumeDataTexture"), 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_3D, gl.volume_texture);
+
     gl.bindImageTexture(0, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
     gl.bindImageTexture(1, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-    gl.bindImageTexture(2, gl.refVertex_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
+    gl.bindImageTexture(2, gl.refNormal_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
     gl.bindImageTexture(3, gl.render_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA8UI);
+
     gl.uniformMatrix4fv(gl.getUniformLocation(p2vTrackProg, "T"), false, _T);
-    gl.uniform1f(gl.getUniformLocation(p2vTrackProg, "volDim"), sliderVolumeLength.value);
+    gl.uniform1f(gl.getUniformLocation(p2vTrackProg, "volDim"), volLength);
     gl.uniform1f(gl.getUniformLocation(p2vTrackProg, "volSize"), volSize[0]);
     gl.uniform1i(gl.getUniformLocation(p2vTrackProg, "mip"), _level);
     gl.dispatchCompute(width / 32, height / 32, 1);
@@ -170,6 +186,7 @@ function calcPoseP2P(gl, width, height) {
       var result = new Float32Array(6);
       var icpData = {AE:0.0, icpCount:0};
 
+      // use proper lvls ....
       for (let i = 0; i < 2; i++)
       {
         var delta = glMatrix.mat4.create();
@@ -191,15 +208,14 @@ function calcPoseP2P(gl, width, height) {
   }
 
 
-  function calcPoseP2V(gl) {
+
+  function calcPoseP2V(gl, width, height) {
 
     if (resetFlag == 0) {
-      generateVertNorms(gl);
-      raycastVolume(gl);
+      generateVertNorms(gl, width, height);
 
-      var T = glMatrix.mat4.create();
 
-      T = [...pose];
+      var T = glMatrix.mat4.clone(pose);
       var level = 0;
 
       var A = new Float32Array(36); // 6 * 6
@@ -212,18 +228,27 @@ function calcPoseP2P(gl, width, height) {
       var tracked = false;
 
 
+
       for (let i = 0; i < 2; i++)
       {
-        var twistedResult = this._twistMatrix(result);
-        let tempT = math.flatten(math.expm(twistedResult));
 
-        var currT = glMatrix.mat4.create();
+        var twistedResult = twist(result);
+        let tempTmat = math.expm(twistedResult);
+
+        let tempTtemp = glMatrix.mat4.fromValues(tempTmat.get([0,0]), tempTmat.get([0,1]), tempTmat.get([0,2]), tempTmat.get([0,3]),
+                                             tempTmat.get([1,0]), tempTmat.get([1,1]), tempTmat.get([1,2]), tempTmat.get([1,3]),
+                                             tempTmat.get([2,0]), tempTmat.get([2,1]), tempTmat.get([2,2]), tempTmat.get([2,3]),
+                                             tempTmat.get([3,0]), tempTmat.get([3,1]), tempTmat.get([3,2]), tempTmat.get([3,3])
+          );
         
-        for (var iter=0; iter<tempT.length; iter++) currT[iter] = tempT[iter];      
+          let currT = glMatrix.mat4.create();
+          glMatrix.mat4.multiply(currT, tempTtemp, T);    
 
         trackP2V(gl, width, height, currT, level);
         reduceP2V(gl);
         getReduction(gl, A, b, icpData);
+
+        //console.log(icpData);
 
         let scaling = 1.0 / (Math.max(...A) > 0.0 ? Math.max(...A) : 1.0);
 
@@ -252,15 +277,217 @@ function calcPoseP2P(gl, width, height) {
           tracked = false;
         }
 
-        //this._resultToMatrix(result, delta);
-        //glMatrix.mat4.mul(T, delta, T);
+        // this._resultToMatrix(result, delta);
+        // glMatrix.mat4.mul(T, delta, T);
       }
-      //pose = [...T];
+
+      let tr = twist(result);
+        let trmat = math.expm(tr);
+
+        let temptrmat = glMatrix.mat4.fromValues(
+        trmat.get([0,0]), trmat.get([0,1]), trmat.get([0,2]), trmat.get([0,3]),
+        trmat.get([1,0]), trmat.get([1,1]), trmat.get([1,2]), trmat.get([1,3]),
+        trmat.get([2,0]), trmat.get([2,1]), trmat.get([2,2]), trmat.get([2,3]),
+        trmat.get([3,0]), trmat.get([3,1]), trmat.get([3,2]), trmat.get([3,3])
+          );
+
+          glMatrix.mat4.multiply(pose, temptrmat, T);
 
 
     }
     else {
-      this._getClickedPoint();
+      getClickedPoint(gl);
     }
     integrateVolume(gl, integrateFlag, resetFlag);
+  }
+
+
+
+
+  function genIndexMap(gl, invT) {
+
+    gl.useProgram(indexMapGenProg);
+
+    gl.enable(gl.DEPTH_TEST);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, gl.indexMapFBO);
+    gl.clearColor(-1.0, -1.0, -1.0, -1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    let w = imageSize[0] * 4;
+    let h = imageSize[1] * 4;
+    gl.viewport(0, 0, w, h);
+
+
+    gl.uniformMatrix4fv(gl.getUniformLocation(indexMapGenProg, "invT"), false, invT);
+    gl.uniformMatrix4fv(gl.getUniformLocation(indexMapGenProg, "P"), false, matP); // calibrated persepective
+    gl.uniform2fv(gl.getUniformLocation(indexMapGenProg, "imSize"), imageSize);
+    gl.uniform4fv(gl.getUniformLocation(indexMapGenProg, "cam"), camPam);
+    gl.uniform1f(gl.getUniformLocation(indexMapGenProg, "maxDepth"), 4.0); // SET ME PROPERLY
+
+
+    gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboGlobalMap[gl.buffSwitch]);
+
+    gl.drawArrays(gl.POINTS, 0, gl.mapSize[0]); // this needs to be the number of points in the map
+    //gl.drawArrays(gl.POINTS, 0, 848*480);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+  }
+
+  function updateGlobalMap(gl, T) {
+
+    let invT = glMatrix.mat4.create();
+    glMatrix.mat4.invert(invT, T);
+
+    gl.useProgram(updateGlobalMapProg);
+    gl.uniformMatrix4fv(gl.getUniformLocation(updateGlobalMapProg, "T"), false, T);
+    gl.uniformMatrix4fv(gl.getUniformLocation(updateGlobalMapProg, "invT"), false, invT);
+    gl.uniform1i(gl.getUniformLocation(updateGlobalMapProg, "timestamp"), gl.frameCounter);
+    gl.uniform1i(gl.getUniformLocation(updateGlobalMapProg, "firstFrame"), gl.firstFrame);
+    gl.uniform1f(gl.getUniformLocation(updateGlobalMapProg, "sigma"), 0.6);
+    gl.uniform1f(gl.getUniformLocation(updateGlobalMapProg, "c_stable"), gl.cStable);
+    gl.uniformMatrix4fv(gl.getUniformLocation(updateGlobalMapProg, "K"), false, K);
+    gl.uniform1ui(gl.getUniformLocation(updateGlobalMapProg, "maxMapSize"), 5000000);
+
+
+    gl.bindImageTexture(0, gl.indexMap_texture, 0, false, 0, gl.READ_ONLY, gl.R32F);
+    gl.bindImageTexture(1, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+    gl.bindImageTexture(2, gl.normal_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+    gl.bindImageTexture(3, gl.color_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
+
+
+
+    gl.bindBuffer(gl.ATOMIC_COUNTER_BUFFER, gl.atomicGMCounter[gl.buffSwitch]);
+    gl.bufferSubData(gl.ATOMIC_COUNTER_BUFFER, 0, gl.mapSize);
+    gl.bindBuffer(gl.ATOMIC_COUNTER_BUFFER, null);
+
+    gl.bindBufferBase(gl.ATOMIC_COUNTER_BUFFER, 0, gl.atomicGMCounter[gl.buffSwitch]);
+    gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboGlobalMap[gl.buffSwitch]);
+
+    gl.dispatchCompute(divup(imageSize[0], 32), divup(imageSize[1], 32), 1);
+    gl.memoryBarrier(gl.ATOMIC_COUNTER_BARRIER_BIT);
+
+
+
+
+    gl.bindBuffer(gl.ATOMIC_COUNTER_BUFFER, gl.atomicGMCounter[gl.buffSwitch]);
+    gl.getBufferSubData(gl.ATOMIC_COUNTER_BUFFER, 0, gl.mapSize);
+    gl.bindBuffer(gl.ATOMIC_COUNTER_BUFFER, null);
+
+    console.log(gl.mapSize[0]);
+
+    // gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboGlobalMap[gl.buffSwitch]);
+    // gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, gl.globArr);
+    // gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, null);
+
+    
+
+  }
+
+  function removeUnnecessaryPoints(gl) {
+
+    gl.useProgram(removeUnnecessaryPointsProg);
+
+    buffs = [gl.buffSwitch, (gl.buffSwitch + 1) % 2];
+
+    gl.uniform1i(gl.getUniformLocation(removeUnnecessaryPointsProg, "timestamp"), gl.frameCounter);
+    gl.uniform1f(gl.getUniformLocation(removeUnnecessaryPointsProg, "c_stable"), gl.cStable);
+
+    gl.bindBuffer(gl.ATOMIC_COUNTER_BUFFER, gl.atomicGMCounter[buffs[1]]);
+    let blankData = new Uint32Array(1);
+    gl.bufferSubData(gl.ATOMIC_COUNTER_BUFFER, 0, blankData);
+    gl.bindBuffer(gl.ATOMIC_COUNTER_BUFFER, null);
+
+    gl.bindBufferBase(gl.ATOMIC_COUNTER_BUFFER, 1, gl.atomicGMCounter[buffs[1]]);
+
+    gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboGlobalMap[buffs[0]]);
+    gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, gl.ssboGlobalMap[buffs[1]]);
+
+    gl.dispatchCompute(divup(gl.mapSize[0], 400), 1, 1);
+
+    gl.memoryBarrier(gl.ALL_BARRIER_BITS);
+
+    gl.bindBuffer(gl.ATOMIC_COUNTER_BUFFER, gl.atomicGMCounter[buffs[1]]);
+    gl.getBufferSubData(gl.ATOMIC_COUNTER_BUFFER, 0, gl.mapSize);
+    gl.bindBuffer(gl.ATOMIC_COUNTER_BUFFER, null);
+
+    gl.buffSwitch = buffs[1];
+  }
+
+  function genVirtualFrame(gl, invT) {
+
+    gl.useProgram(genVirtualFrameProg);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, gl.virtualFrameFBO);
+    gl.clearColor(0,0,0,0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.viewport(0, 0, imageSize[0], imageSize[1]);
+
+    gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboGlobalMap[gl.buffSwitch]);
+
+    gl.uniformMatrix4fv(gl.getUniformLocation(genVirtualFrameProg, "invT"), false, invT);
+    gl.uniform4fv(gl.getUniformLocation(genVirtualFrameProg, "cam"), camPam);
+    gl.uniform2fv(gl.getUniformLocation(genVirtualFrameProg, "imSize"), imageSize);
+    gl.uniform1f(gl.getUniformLocation(genVirtualFrameProg, "maxDepth"), 4.0);
+    gl.uniform1f(gl.getUniformLocation(genVirtualFrameProg, "c_stable"), gl.cStable);
+
+    gl.drawArrays(gl.POINTS, 0, gl.mapSize[0]);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  function calcPoseSplat(gl) {
+
+    generateVertNorms(gl, imageSize[0], imageSize[1]);
+
+    let invPose = glMatrix.mat4.create();
+    glMatrix.mat4.invert(invPose, pose);
+
+    genIndexMap(gl, invPose);
+
+    // if (resetFlag == 0) {
+
+
+      
+    //   var T = glMatrix.mat4.create();
+
+    //   T = [...pose];
+    //   var level = 0;
+
+    //   var A = new Float32Array(36); // 6 * 6
+    //   var b = new Float32Array(6);
+    //   var result = new Float32Array(6);
+    //   var icpData = {AE:0.0, icpCount:0};
+
+    //   // use proper lvls ....
+    //   for (let i = 0; i < 2; i++)
+    //   {
+    //     var delta = glMatrix.mat4.create();
+    //     trackP2P(gl, imageSize[0], imageSize[1], T, level);
+    //     reduceP2P(gl);
+    //     getReduction(gl, A, b, icpData);
+    //     solve(A, b, result);
+    //     resultToMatrix(result, delta);
+
+    //     glMatrix.mat4.mul(T, delta, T);
+    //   }
+    //   pose = [...T];
+    // }
+    // else {
+    //   getClickedPoint(gl);
+    // }
+
+
+
+
+    if (integrateFlag) {
+      updateGlobalMap(gl, pose); // frameCounter is counting window draws, not realsense frame number
+      removeUnnecessaryPoints(gl);
+    }
+
+
+    genVirtualFrame(gl, invPose);
+
+    
+
   }

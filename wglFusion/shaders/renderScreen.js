@@ -15,12 +15,19 @@ const fragmentShaderSource = `#version 310 es
     precision mediump float;
 
     layout (binding = 0) uniform highp sampler2D depth;
+    layout (binding = 1) uniform highp sampler2D colorMap;
+    layout (binding = 2) uniform highp sampler2D refNormalMap;
+    layout (binding = 3) uniform highp sampler2D refVertexMap;
+    layout (binding = 4) uniform highp sampler2D normalMap;
+    layout (binding = 5) uniform highp sampler2D vertexMap;
+    layout (binding = 5) uniform highp sampler2D indexMap;
 
-    layout(binding = 0, rgba8ui) readonly uniform mediump uimage2D colorMap;
-    layout(binding = 1, rgba32f) readonly uniform mediump image2D refNormalMap;
-    layout(binding = 2, rgba32f) readonly uniform mediump image2D refVertexMap;
-    layout(binding = 3, rgba32f) readonly uniform mediump image2D normalMap;
-    layout(binding = 4, rgba32f) readonly uniform mediump image2D vertexMap;
+    // layout(binding = 0, rgba8ui) readonly uniform mediump uimage2D colorMap;
+    // layout(binding = 1, rgba32f) readonly uniform mediump image2D refNormalMap;
+    // layout(binding = 2, rgba32f) readonly uniform mediump image2D refVertexMap;
+    // layout(binding = 3, rgba32f) readonly uniform mediump image2D normalMap;
+    // layout(binding = 4, rgba32f) readonly uniform mediump image2D vertexMap;
+    // layout(binding = 5, r32f) readonly uniform mediump image2D indexMap;
 
 
     uniform int renderOptions;
@@ -45,13 +52,17 @@ const fragmentShaderSource = `#version 310 es
 
     if (renderColor == 1)
     {
-        vec4 col = vec4(imageLoad(colorMap, ivec2(t_image + 0.5f)));
+        //vec4 col = vec4(imageLoad(colorMap, ivec2(t_image + 0.5f)));
+        vec4 col = vec4(texture(colorMap, t));
+
         outColor = vec4(col.xyz * 0.00390625f, 1.0f);
     }
 
     if (renderRefNorm == 1)
     {
-        vec4 refNormsData = vec4(imageLoad(refNormalMap, ivec2(t_image + 0.5f)));
+        //vec4 refNormsData = vec4(imageLoad(refNormalMap, ivec2(t_image + 0.5f)));
+        vec4 refNormsData = vec4(texture(refNormalMap, t));
+
         if (abs(refNormsData.x) > 0.0f)
         {
             outColor = vec4(abs(refNormsData.xyz), 1.0f);
@@ -60,14 +71,17 @@ const fragmentShaderSource = `#version 310 es
 
     if (renderRefVert == 1)
     {
-        vec4 refVertsData = vec4(imageLoad(refVertexMap, ivec2(t_image + 0.5f)));
-        outColor = vec4(refVertsData.xyz, 1.0f);
+       // vec4 refVertsData = vec4(imageLoad(refVertexMap, ivec2(t_image + 0.5f)));
+        vec4 refVertsData = vec4(texture(refVertexMap, t));
 
+        outColor = vec4(abs(refVertsData.xyz), 1.0f);
     }
 
     if (renderNorm == 1)
     {
-        vec4 normsData = vec4(imageLoad(normalMap, ivec2(t_image + 0.5f)));
+        //vec4 normsData = vec4(imageLoad(normalMap, ivec2(t_image + 0.5f)));
+        vec4 normsData = vec4(texture(normalMap, t));
+
         if (abs(normsData.x) > 0.0f)
         {
             outColor = vec4(abs(normsData.xyz), 1.0f);
@@ -76,12 +90,17 @@ const fragmentShaderSource = `#version 310 es
 
     if (renderVert == 1)
     {
-        vec4 vertsData = vec4(imageLoad(vertexMap, ivec2(t_image + 0.5f)));
-        outColor = vec4(vertsData.xyz, 1.0f);
+        //vec4 vertsData = vec4(imageLoad(vertexMap, ivec2(t_image + 0.5f)));
+        vec4 vertsData = vec4(texture(vertexMap, t));
 
+        outColor = vec4(abs(vertsData.xyz), 1.0f);
     }
 
+    
+   // outColor = vec4(imageLoad(indexMap, ivec2(t_image * 4.0f)).x, 0, 0, 1);
 
+  // vec4 refVertsData = vec4(imageLoad(refVertexMap, ivec2(t_image + 0.5f)));
+  // outColor = vec4(abs(refVertsData.xyz), 1.0f);
 
   }
   `;

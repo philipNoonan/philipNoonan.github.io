@@ -1,6 +1,7 @@
   const p2pReduceSource = `#version 310 es
   layout (local_size_x = 112, local_size_y = 1, local_size_z = 1) in;
-
+  precision highp float;
+  
   struct reduType
   {
     float result;
@@ -35,18 +36,19 @@
     {
       for (uint x = sline; x < uint(imSize.x); x += gl_WorkGroupSize.x)
       {
-        reduType row = trackOutput.data[(y * uint(imSize.x)) + x];
-        if (row.result < 1.0f)
+        //reduType row = trackOutput.data[(y * uint(imSize.x)) + x];
+
+        if (trackOutput.data[(y * uint(imSize.x)) + x].result < 1.0f)
         {
-          if (row.result == -4.0f)
+          if (trackOutput.data[(y * uint(imSize.x)) + x].result == -4.0f)
           {
             sums[29]++;
           }
-          if (row.result == -5.0f)
+          if (trackOutput.data[(y * uint(imSize.x)) + x].result == -5.0f)
           {
             sums[30]++;
           }
-          if (row.result > -4.0f)
+          if (trackOutput.data[(y * uint(imSize.x)) + x].result > -4.0f)
           {
             sums[31]++;
           }
@@ -54,41 +56,41 @@
         }
 
         // Error part
-        sums[0] += row.error * row.error;
+        sums[0] += trackOutput.data[(y * uint(imSize.x)) + x].error * trackOutput.data[(y * uint(imSize.x)) + x].error;
 
         // JTe part
         for (int i = 0; i < 6; ++i)
         {
-          sums[i + 1] += row.error * row.J[i];
+          sums[i + 1] += trackOutput.data[(y * uint(imSize.x)) + x].error * trackOutput.data[(y * uint(imSize.x)) + x].J[i];
         }
 
         // JTJ part
-        sums[7] += row.J[0] * row.J[0];
-        sums[8] += row.J[0] * row.J[1];
-        sums[9] += row.J[0] * row.J[2];
-        sums[10] += row.J[0] * row.J[3];
-        sums[11] += row.J[0] * row.J[4];
-        sums[12] += row.J[0] * row.J[5];
+        sums[7] += trackOutput.data[(y * uint(imSize.x)) + x].J[0] * trackOutput.data[(y * uint(imSize.x)) + x].J[0];
+        sums[8] += trackOutput.data[(y * uint(imSize.x)) + x].J[0] * trackOutput.data[(y * uint(imSize.x)) + x].J[1];
+        sums[9] += trackOutput.data[(y * uint(imSize.x)) + x].J[0] * trackOutput.data[(y * uint(imSize.x)) + x].J[2];
+        sums[10] += trackOutput.data[(y * uint(imSize.x)) + x].J[0] * trackOutput.data[(y * uint(imSize.x)) + x].J[3];
+        sums[11] += trackOutput.data[(y * uint(imSize.x)) + x].J[0] * trackOutput.data[(y * uint(imSize.x)) + x].J[4];
+        sums[12] += trackOutput.data[(y * uint(imSize.x)) + x].J[0] * trackOutput.data[(y * uint(imSize.x)) + x].J[5];
 
-        sums[13] += row.J[1] * row.J[1];
-        sums[14] += row.J[1] * row.J[2];
-        sums[15] += row.J[1] * row.J[3];
-        sums[16] += row.J[1] * row.J[4];
-        sums[17] += row.J[1] * row.J[5];
+        sums[13] += trackOutput.data[(y * uint(imSize.x)) + x].J[1] * trackOutput.data[(y * uint(imSize.x)) + x].J[1];
+        sums[14] += trackOutput.data[(y * uint(imSize.x)) + x].J[1] * trackOutput.data[(y * uint(imSize.x)) + x].J[2];
+        sums[15] += trackOutput.data[(y * uint(imSize.x)) + x].J[1] * trackOutput.data[(y * uint(imSize.x)) + x].J[3];
+        sums[16] += trackOutput.data[(y * uint(imSize.x)) + x].J[1] * trackOutput.data[(y * uint(imSize.x)) + x].J[4];
+        sums[17] += trackOutput.data[(y * uint(imSize.x)) + x].J[1] * trackOutput.data[(y * uint(imSize.x)) + x].J[5];
 
-        sums[18] += row.J[2] * row.J[2];
-        sums[19] += row.J[2] * row.J[3];
-        sums[20] += row.J[2] * row.J[4];
-        sums[21] += row.J[2] * row.J[5];
+        sums[18] += trackOutput.data[(y * uint(imSize.x)) + x].J[2] * trackOutput.data[(y * uint(imSize.x)) + x].J[2];
+        sums[19] += trackOutput.data[(y * uint(imSize.x)) + x].J[2] * trackOutput.data[(y * uint(imSize.x)) + x].J[3];
+        sums[20] += trackOutput.data[(y * uint(imSize.x)) + x].J[2] * trackOutput.data[(y * uint(imSize.x)) + x].J[4];
+        sums[21] += trackOutput.data[(y * uint(imSize.x)) + x].J[2] * trackOutput.data[(y * uint(imSize.x)) + x].J[5];
 
-        sums[22] += row.J[3] * row.J[3];
-        sums[23] += row.J[3] * row.J[4];
-        sums[24] += row.J[3] * row.J[5];
+        sums[22] += trackOutput.data[(y * uint(imSize.x)) + x].J[3] * trackOutput.data[(y * uint(imSize.x)) + x].J[3];
+        sums[23] += trackOutput.data[(y * uint(imSize.x)) + x].J[3] * trackOutput.data[(y * uint(imSize.x)) + x].J[4];
+        sums[24] += trackOutput.data[(y * uint(imSize.x)) + x].J[3] * trackOutput.data[(y * uint(imSize.x)) + x].J[5];
 
-        sums[25] += row.J[4] * row.J[4];
-        sums[26] += row.J[4] * row.J[5];
-
-        sums[27] += row.J[5] * row.J[5];
+        sums[25] += trackOutput.data[(y * uint(imSize.x)) + x].J[4] * trackOutput.data[(y * uint(imSize.x)) + x].J[4];
+        sums[26] += trackOutput.data[(y * uint(imSize.x)) + x].J[4] * trackOutput.data[(y * uint(imSize.x)) + x].J[5];
+        
+        sums[27] += trackOutput.data[(y * uint(imSize.x)) + x].J[5] * trackOutput.data[(y * uint(imSize.x)) + x].J[5];
 
         sums[28] += 1.0f;
       }

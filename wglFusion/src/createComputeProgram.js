@@ -15,7 +15,7 @@ self.createComputeProgram = function (gl, computeShaderCode) {
     // Create a WebGLProgram object
     var program = gl.createProgram();
     if (!program) {
-      out.displayError('Fatal error: Failed to create a program object');
+      console.log('Fatal error: Failed to create a program object');
       return null;
     }
   
@@ -30,7 +30,7 @@ self.createComputeProgram = function (gl, computeShaderCode) {
     if (!linked) {
       // There were errors, so get the errors and display them.
       var error = gl.getProgramInfoLog(program);
-      out.displayError('Fatal error: Failed to link program: ' + error);
+      console.log('Fatal error: Failed to link program: ' + error);
       gl.deleteProgram(program);
       gl.deleteShader(computeShader);
       return null;

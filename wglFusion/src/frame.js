@@ -35,15 +35,15 @@ function generateVertNorms(gl, width, height) {
     gl.uniform2fv(gl.getUniformLocation(depthToVertProg, "bottomLeft"), [0, 0]);
     gl.uniform2fv(gl.getUniformLocation(depthToVertProg, "topRight"), imageSize);
 
-    gl.dispatchCompute(width / 32, height / 32, 1);
-    gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    gl.dispatchCompute(divup(width, 32), divup(height, 32), 1);
+    gl.memoryBarrier(gl.ALL_BARRIER_BITS);
 
 
     gl.useProgram(vertToNormProg);
     gl.bindImageTexture(0, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
     gl.bindImageTexture(1, gl.normal_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F)
 
-    gl.dispatchCompute(width / 32, height / 32, 1);
-    gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    gl.dispatchCompute(divup(width, 32), divup(height, 32), 1);
+    gl.memoryBarrier(gl.ALL_BARRIER_BITS);
 
   }

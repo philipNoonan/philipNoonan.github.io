@@ -12,8 +12,8 @@ struct reduSDFType
 
 layout(std430, binding = 0) buffer TrackData
 {
-    reduSDFType trackOutput [];
-};
+    reduSDFType data[];
+} trackOutput;
 
 layout(std430, binding = 1) buffer OutputData
 {
@@ -38,53 +38,48 @@ void main()
     {
         for (uint x = sline; x < uint(imSize.x); x += gl_WorkGroupSize.x) // x = (0:112); x < 512; x += 112
         {
-            reduSDFType row = trackOutput[(y * uint(imSize.x)) + x];
+            //reduSDFType row = trackOutput.data[(y * uint(imSize.x)) + x];
 
-            if (row.result < 1)
+            if (trackOutput.data[(y * uint(imSize.x)) + x].result < 1)
             {
-                if (row.result == -4)
+                if (trackOutput.data[(y * uint(imSize.x)) + x].result == -4)
                 {
                     sums[28] += 1.0f;
                 }
                 continue;
             }
 
-            sums[0] += row.D * row.D;
+            sums[0] += trackOutput.data[(y * uint(imSize.x)) + x].D * trackOutput.data[(y * uint(imSize.x)) + x].D;
 
             for (int i = 0; i< 6; ++i)
             {
-                sums[i + 1] += row.h * row.J[i] * row.D;
+                sums[i + 1] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[i] * trackOutput.data[(y * uint(imSize.x)) + x].D;
             }
 
             // Error part
-            sums[0] += row.D * row.D;
+            sums[0] += trackOutput.data[(y * uint(imSize.x)) + x].D * trackOutput.data[(y * uint(imSize.x)) + x].D;
 
-            sums[7] += row.h * row.J[0] * row.J[0];
-            sums[8] += row.h * row.J[0] * row.J[1];
-            sums[9] += row.h * row.J[0] * row.J[2];
-            sums[10] += row.h * row.J[0] * row.J[3];
-            sums[11] += row.h * row.J[0] * row.J[4];
-            sums[12] += row.h * row.J[0] * row.J[5];
-
-            sums[13] += row.h * row.J[1] * row.J[1];
-            sums[14] += row.h * row.J[1] * row.J[2];
-            sums[15] += row.h * row.J[1] * row.J[3];
-            sums[16] += row.h * row.J[1] * row.J[4];
-            sums[17] += row.h * row.J[1] * row.J[5];
-
-            sums[18] += row.h * row.J[2] * row.J[2];
-            sums[19] += row.h * row.J[2] * row.J[3];
-            sums[20] += row.h * row.J[2] * row.J[4];
-            sums[21] += row.h * row.J[2] * row.J[5];
-
-            sums[22] += row.h * row.J[3] * row.J[3];
-            sums[23] += row.h * row.J[3] * row.J[4];
-            sums[24] += row.h * row.J[3] * row.J[5];
-
-            sums[25] += row.h * row.J[4] * row.J[4];
-            sums[26] += row.h * row.J[4] * row.J[5];
-
-            sums[27] += row.h * row.J[5] * row.J[5];
+             sums[7] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[0] * trackOutput.data[(y * uint(imSize.x)) + x].J[0];
+             sums[8] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[0] * trackOutput.data[(y * uint(imSize.x)) + x].J[1];
+             sums[9] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[0] * trackOutput.data[(y * uint(imSize.x)) + x].J[2];
+            sums[10] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[0] * trackOutput.data[(y * uint(imSize.x)) + x].J[3];
+            sums[11] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[0] * trackOutput.data[(y * uint(imSize.x)) + x].J[4];
+            sums[12] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[0] * trackOutput.data[(y * uint(imSize.x)) + x].J[5];
+            sums[13] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[1] * trackOutput.data[(y * uint(imSize.x)) + x].J[1];
+            sums[14] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[1] * trackOutput.data[(y * uint(imSize.x)) + x].J[2];
+            sums[15] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[1] * trackOutput.data[(y * uint(imSize.x)) + x].J[3];
+            sums[16] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[1] * trackOutput.data[(y * uint(imSize.x)) + x].J[4];
+            sums[17] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[1] * trackOutput.data[(y * uint(imSize.x)) + x].J[5];
+            sums[18] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[2] * trackOutput.data[(y * uint(imSize.x)) + x].J[2];
+            sums[19] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[2] * trackOutput.data[(y * uint(imSize.x)) + x].J[3];
+            sums[20] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[2] * trackOutput.data[(y * uint(imSize.x)) + x].J[4];
+            sums[21] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[2] * trackOutput.data[(y * uint(imSize.x)) + x].J[5];
+            sums[22] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[3] * trackOutput.data[(y * uint(imSize.x)) + x].J[3];
+            sums[23] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[3] * trackOutput.data[(y * uint(imSize.x)) + x].J[4];
+            sums[24] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[3] * trackOutput.data[(y * uint(imSize.x)) + x].J[5];
+            sums[25] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[4] * trackOutput.data[(y * uint(imSize.x)) + x].J[4];
+            sums[26] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[4] * trackOutput.data[(y * uint(imSize.x)) + x].J[5];
+            sums[27] += trackOutput.data[(y * uint(imSize.x)) + x].h * trackOutput.data[(y * uint(imSize.x)) + x].J[5] * trackOutput.data[(y * uint(imSize.x)) + x].J[5];
 
             sums[28] += 1.0f;
         }

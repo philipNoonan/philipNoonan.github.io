@@ -18,14 +18,14 @@ self.createAndCompileShader = function (gl, type, source) {
             typeName = "Compute Shader";
         break;
       default:
-        out.displayError("Invalid type of shader in createAndCompileShader()");
+        console.log("Invalid type of shader in createAndCompileShader()");
         return null;
     }
   
     // Create shader object
     var shader = gl.createShader(type);
     if (!shader) {
-      out.displayError("Fatal error: gl could not create a shader object.");
+      console.log("Fatal error: gl could not create a shader object.");
       return null;
     }
   
@@ -40,7 +40,7 @@ self.createAndCompileShader = function (gl, type, source) {
     if (!compiled) {
       // There are errors, so display them
       var errors = gl.getShaderInfoLog(shader);
-      out.displayError('Failed to compile ' + typeName + ' with these errors:' + errors);
+      console.log('Failed to compile ' + typeName + ' with these errors:' + errors);
       gl.deleteShader(shader);
       return null;
     }
