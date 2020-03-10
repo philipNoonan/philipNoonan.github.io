@@ -22,6 +22,34 @@ function getClickedPoint(gl) {
 
 }
 
+function alignDepthColor(gl) {
+  gl.useProgram(alignDepthColorProg);
+
+  gl.bindImageTexture(3, gl.mappingC2D_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA16UI)
+  gl.bindImageTexture(4, gl.mappingD2C_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA16UI)
+
+  gl.uniform1i(gl.getUniformLocation(alignDepthColorProg, "functionID"), 0);
+
+  gl.dispatchCompute(divup(imageSize[0], 32), divup(imageSize[1], 32), 1);
+  gl.memoryBarrier(gl.ALL_BARRIER_BITS);
+
+
+
+
+  gl.bindImageTexture(0, gl.vertex_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F)
+  gl.bindImageTexture(1, gl.color_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI)
+  gl.bindImageTexture(2, gl.colorAligned_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA8UI)
+  gl.bindImageTexture(3, gl.mappingC2D_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA16UI)
+  gl.bindImageTexture(4, gl.mappingD2C_texture, 0, false, 0, gl.WRITE_ONLY, gl.RGBA16UI)
+
+  gl.uniformMatrix4fv(gl.getUniformLocation(alignDepthColorProg, "d2c"), false, depthToColor);
+  gl.uniform4fv(gl.getUniformLocation(alignDepthColorProg, "cam"), colorCamPam);
+  gl.uniform1i(gl.getUniformLocation(alignDepthColorProg, "functionID"), 1);
+
+  gl.dispatchCompute(divup(imageSize[0], 32), divup(imageSize[1], 32), 1);
+  gl.memoryBarrier(gl.ALL_BARRIER_BITS);
+}
+
 function generateVertNorms(gl, width, height) {
 
     gl.useProgram(depthToVertProg);

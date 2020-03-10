@@ -42,7 +42,7 @@
     ivec2 imSize = imageSize(inVertex); // mipmapped sizes
     ivec2 refSize = imageSize(refVertex); // full depth size
 
-    uint offset = uint((pix.y * imSize.x) + pix.x);
+    //uint offset = uint((pix.y * imSize.x) + pix.x);
 
     for (int camera = 0; camera < numberOfCameras; camera++)
     {
@@ -62,8 +62,10 @@
           // this depth vert in global space is then prejected back to normal depth space
       //vec3 projPixel = projectPointImage(projectedVertex.xyz);
       vec4 projectedPos = view * projectedVertex;
-      vec2 projPixel = vec2(projectedPos.x / projectedPos.z + 0.5f, projectedPos.y / projectedPos.z + 0.5f);
       
+      vec2 projPixel = vec2(projectedPos.x / projectedPos.z + 0.5f, projectedPos.y / projectedPos.z + 0.5f);
+      //vec3 projPixel = projectPointImage(projectedVertex.xyz);
+
       if (projPixel.x < 0.0f || int(projPixel.x) > refSize.x || projPixel.y < 0.0f || int(projPixel.y) > refSize.y)
           {
             trackOutput.data[offset].result = -2.0f;
@@ -83,7 +85,7 @@
             }
             else
             {
-			  vec3 refVert = imageLoad(refVertex, refPixel).xyz;
+			        vec3 refVert = imageLoad(refVertex, refPixel).xyz;
               vec3 diff = refVert - projectedVertex.xyz;
               vec4 currNormal = imageLoad(inNormal, ivec2(pix));
               vec3 projectedNormal = vec3((T * vec4(currNormal.xyz, 0.0f)).xyz); // input mipmap sized pixel

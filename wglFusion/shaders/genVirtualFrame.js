@@ -7,11 +7,12 @@ struct gMapData
 	vec4 norm;	// Normal
 	vec4 color;	// Color
 };
+
 // Distance global map
 layout(std430, binding = 0) buffer gMap
 {
-	gMapData elems[];
-};
+	gMapData data[];
+} elems;
 
 uniform mat4 invT;
 uniform vec4 cam; // cx cy fx fy
@@ -21,8 +22,8 @@ uniform float c_stable;
 
 vec3 projectPoint(vec3 p)
 {
-    return vec3(((((cam.z * p.x) / p.z) + cam.x) - (imSize.x * 0.5)) / (imSize.x * 0.5),
-                ((((cam.w * p.y) / p.z) + cam.y) - (imSize.y * 0.5)) / (imSize.y * 0.5),
+    return vec3(((((cam.z * p.x) / p.z) + cam.x) - (imSize.x * 0.5f)) / (imSize.x * 0.5f),
+                ((((cam.w * p.y) / p.z) + cam.y) - (imSize.y * 0.5f)) / (imSize.y * 0.5f),
                 p.z / maxDepth);
 }
 
@@ -46,29 +47,29 @@ void main(void)
 {
 	int index = gl_VertexID;
 
-	vec4 vPosHome = invT * vec4(elems[index].vert.xyz, 1.0f);
-	float conf = elems[index].data.x;
-	float radius = elems[index].data.y;
+	vec4 vPosHome = invT * vec4(elems.data[index].vert.xyz, 1.0f);
+	float conf = elems.data[index].data.x;
+	float radius = elems.data[index].data.y;
 	
-	// if(vPosHome.z > maxDepth || vPosHome.z < 0.0f || conf < c_stable)// || time - vColor.w > timeDelta || vColor.w > maxTime)
-    // {
-    //     gl_Position = vec4(1000.0f, 1000.0f, 1000.0f, 1000.0f);
-    //     gl_PointSize = 0.0f;
-    // }
-    // else
-    // {
+	if(vPosHome.z > maxDepth || vPosHome.z < 0.0f || conf < c_stable)// || time - vColor.w > timeDelta || vColor.w > maxTime)
+    {
+        gl_Position = vec4(1000.0f, 1000.0f, 1000.0f, 1000.0f);
+        gl_PointSize = 0.0f;
+    }
+    else
+    {
 		gl_Position = vec4(projectPoint(vPosHome.xyz), 1.0f);
 
-		gsColor = vec4(elems[index].color.xyzw);
+		gsColor = vec4(elems.data[index].color.xyzw);
 
 		gsVert = vPosHome;
 
-		gsNorm = vec4(normalize(mat3(invT) * elems[index].norm.xyz), 0.0f);
+		gsNorm = vec4(normalize(mat3(invT) * elems.data[index].norm.xyz), 0.0f);
 
-		gsData = elems[index].data.xyzw;
+		gsData = elems.data[index].data.xyzw;
 
 
-		vec3 x1 = normalize(vec3((gsNorm.y - gsNorm.z), -gsNorm.x, gsNorm.x)) * radius * 1.41421356;
+		vec3 x1 = normalize(vec3((gsNorm.y - gsNorm.z), -gsNorm.x, gsNorm.x)) * radius * 1.41421356f;
 	    
 	    vec3 y1 = cross(gsNorm.xyz, x1);
 	
@@ -86,7 +87,7 @@ void main(void)
 	    gl_PointSize = max(0.0f, max(xDiff, yDiff));
 		//gl_PointSize = 10.0f;
 
-	//}
+	}
 }
 `;
    
@@ -128,7 +129,7 @@ void main(void)
 	float z = corrected_pos.z;
 
 
-	outPos = vec4((gl_FragCoord.x - cam.x) * z * (1.f / cam.z), (gl_FragCoord.y - cam.y) * z * (1.f / cam.w), z, gsData.x);
+	outPos = vec4((gl_FragCoord.x - cam.x) * z * (1.f / cam.z), (gl_FragCoord.y - cam.y) * z * (1.0f / cam.w), z, gsData.x);
 	outNorm = gsNorm;
 	outZZZ = vec4(gsVert.zzz, 0.0);
 	outcolor = gsColor;

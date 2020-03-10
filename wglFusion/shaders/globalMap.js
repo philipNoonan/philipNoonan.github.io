@@ -5,6 +5,7 @@ layout(binding = 0, r32f) readonly uniform highp image2D indexMap;	// Index map
 layout(binding = 1, rgba32f) readonly uniform highp image2D mVertMap;	// Vertex map (measured)
 layout(binding = 2, rgba32f) readonly uniform highp image2D mNormMap;	// Normal map (measured)
 layout(binding = 3, rgba8) readonly uniform highp image2D mColorMap;	// RGBA color map (measured) 
+
 //layout(binding = 4, rgba8) readonly uniform highp image2D mTrackStatusmap; // vertex tracking status (calculated)
 
 //layout (binding = 5, rgba32f) writeonly uniform highp image2D statusMap;	// Dynamics status map
@@ -22,7 +23,7 @@ uniform int firstFrame;
 
 const float radThresh = 0.2588190451f;	// cos(PI * 75.0 / 180.0)
 const float PI = 3.1415927f;
-const float PI_2 = PI / 2.0;
+const float PI_2 = PI / 2.0f;
 const float sqrt2 = 1.41421356237f;
 
 
@@ -38,8 +39,8 @@ struct gMapData
 // Distance global map
 layout(std430, binding = 0) buffer gMap
 {
-	gMapData elems[];
-};
+	gMapData data[];
+} elems;
 
 float getRadius(float depth, float norm_z, float camz, float camw)
 {
@@ -108,13 +109,13 @@ float calcLuminance(vec3 col)
 
 bool closeEachOther(int idxSelect, int idxCandi)
 {
-	float distV = length(elems[idxSelect].vert.xyz - elems[idxCandi].vert.xyz);
-	float distN = dot(elems[idxSelect].norm.xyz, elems[idxCandi].norm.xyz);
-	float distR = abs(elems[idxSelect].data.y - elems[idxCandi].data.y);
-	float distC = abs(calcLuminance(elems[idxSelect].color.xyz) - calcLuminance(elems[idxCandi].color.xyz));
+	float distV = length(elems.data[idxSelect].vert.xyz - elems.data[idxCandi].vert.xyz);
+	float distN = dot(elems.data[idxSelect].norm.xyz, elems.data[idxCandi].norm.xyz);
+	float distR = abs(elems.data[idxSelect].data.y - elems.data[idxCandi].data.y);
+	float distC = abs(calcLuminance(elems.data[idxSelect].color.xyz) - calcLuminance(elems.data[idxCandi].color.xyz));
 
 	// NOTE: I'm not sure if these parameters are proper or not...
-	if (distV <= 0.05f && distN > 0.9f && distR < 1.4f && distC > 0.85f) 
+	if (distV <= 0.05f && distN > 0.5f && distR < 1.4f && distC > 0.85f) 
 	{
 		return true;
 	}
@@ -130,7 +131,7 @@ void removePoint(inout int idx)
 	//elems[idx].norm = vec4(0.0, 0.0, 0.0, 0.0);
 	//elems[idx].color = vec4(0.0, 0.0, 0.0, 0.0);
 	//elems[idx].data.x = -1.0f;	// confidence
-	elems[idx].data.y = -1.0f;	// radius
+	elems.data[idx].data.y = -1.0f;	// radius
 	//elems[idx].data.z = -1.0f;	// timestamp
 
 	idx = -1;
@@ -138,13 +139,13 @@ void removePoint(inout int idx)
 void mergeAndRemove(int idxSelect, inout int idxCandi)
 {
 
-	elems[idxSelect].vert = vec4(calcWeightedAvg(elems[idxSelect].vert.xyz, elems[idxCandi].vert.xyz, elems[idxSelect].data.x, elems[idxCandi].data.x), 1.0f);
-	elems[idxSelect].norm.xyz = normalize(calcWeightedAvg(elems[idxSelect].norm.xyz, elems[idxCandi].norm.xyz, elems[idxSelect].data.x, elems[idxCandi].data.x));
-	elems[idxSelect].color = vec4(calcWeightedAvg(elems[idxSelect].color.rgb, elems[idxCandi].color.rgb, elems[idxSelect].data.x, elems[idxCandi].data.x), 1.0f);
+	elems.data[idxSelect].vert = vec4(calcWeightedAvg(elems.data[idxSelect].vert.xyz, elems.data[idxCandi].vert.xyz, elems.data[idxSelect].data.x, elems.data[idxCandi].data.x), 1.0f);
+	elems.data[idxSelect].norm.xyz = normalize(calcWeightedAvg(elems.data[idxSelect].norm.xyz, elems.data[idxCandi].norm.xyz, elems.data[idxSelect].data.x, elems.data[idxCandi].data.x));
+	elems.data[idxSelect].color = vec4(calcWeightedAvg(elems.data[idxSelect].color.rgb, elems.data[idxCandi].color.rgb, elems.data[idxSelect].data.x, elems.data[idxCandi].data.x), 1.0f);
 
-	elems[idxSelect].data.y = calcWeightedAvg(elems[idxSelect].data.y, elems[idxCandi].data.y, elems[idxSelect].data.x, elems[idxCandi].data.x);
-	elems[idxSelect].data.x = max(elems[idxSelect].data.x, elems[idxCandi].data.x);
-	elems[idxSelect].data.z = max(elems[idxSelect].data.z, elems[idxCandi].data.z);
+	elems.data[idxSelect].data.y = calcWeightedAvg(elems.data[idxSelect].data.y, elems.data[idxCandi].data.y, elems.data[idxSelect].data.x, elems.data[idxCandi].data.x);
+	elems.data[idxSelect].data.x = max(elems.data[idxSelect].data.x, elems.data[idxCandi].data.x);
+	elems.data[idxSelect].data.z = max(elems.data[idxSelect].data.z, elems.data[idxCandi].data.z);
 
 	removePoint(idxCandi);
 }
@@ -156,7 +157,7 @@ void main(void)
 	// current vertex and normal
 	vec3 inputVert = vec3(imageLoad(mVertMap, uv).xyz);
 	vec3 inputNorm = vec3(imageLoad(mNormMap, uv).xyz);
-	vec3 inputColor = vec3(imageLoad(mColorMap, uv).rgb);	// Note: Assuming "BGR" input
+	vec3 inputColor = vec3(imageLoad(mColorMap, uv).xyz);	// Note: Assuming "BGR" input
 	//vec4 status = imageLoad(mTrackStatusmap, uv).xyzw;
 	ivec2 bestPix;
 
@@ -170,22 +171,14 @@ void main(void)
 		float rad = getRadius(inputVert.z, inputNorm.z, 1.0f / K[0][0], 1.0f / K[1][1]);
 
 		uint idx = atomicCounterIncrement(g_idx);
-
-        // elems[idx].vert = T * vec4(inputVert, 1.0f);
-		// elems[idx].norm = vec4(5, 6, 7, 8);
-		// elems[idx].color = vec4(9, 10, 11, 12);
-		// elems[idx].data.x = 13.0f;		// confidence
-		// elems[idx].data.y = 14.0f;		// radius
-		// elems[idx].data.z = 15.0f;	// timestamp
-        // elems[idx].data.w = 16.0f;	// timestamp
         
-		elems[idx].vert = T * vec4(inputVert, 1.0f);
-		elems[idx].norm = vec4(inputNorm.xyz, 0.0);//vec4(mat3(T) * inputNorm, 0.0f);
-		elems[idx].color = vec4(inputColor, 1.0f);
-		elems[idx].data.x = alpha * 10.0f;		// confidence
-		elems[idx].data.y = rad;		// radius
-		elems[idx].data.z = float(timestamp);	// timestamp
-		elems[idx].data.w = float(timestamp);	// timestamp
+		elems.data[idx].vert = T * vec4(inputVert, 1.0f);
+		elems.data[idx].norm = vec4(mat3(T) * inputNorm, 0.0f);
+		elems.data[idx].color = vec4(inputColor, 1.0f);
+		elems.data[idx].data.x = alpha * 10.0f;		// confidence
+		elems.data[idx].data.y = rad;		// radius
+		elems.data[idx].data.z = float(timestamp);	// timestamp
+		elems.data[idx].data.w = float(timestamp);	// timestamp
 	
 	}
 	else
@@ -213,13 +206,13 @@ void main(void)
 			idxCandi[i] = int(imageLoad(indexMap, ivec2(uv.x * 4 + i % 4, uv.y * 4 + i / 4)));
 			if (idxCandi[i] >= 0)
 			{
-				_v[i] = mat4x3(invT) * elems[idxCandi[i]].vert;
+				_v[i] = mat4x3(invT) * elems.data[idxCandi[i]].vert;
 				// 4.1 Data Association: Condition #1
 				float dist = abs(inputVert.z - _v[i].z);
 				if (dist < sigma_depth)
 				{
-					_n[i] = mat3(invT) * elems[idxCandi[i]].norm.xyz;
-					float candiConf = elems[idxCandi[i]].data.x;
+					_n[i] = mat3(invT) * elems.data[idxCandi[i]].norm.xyz;
+					float candiConf = elems.data[idxCandi[i]].data.x;
 					// 4.1 Data Association: Condition #2 & #3
 					// cos(PI * 20.0 / 180.0) = 0.93969262078
 					if (dot(inputNorm, _n[i]) > 0.93969262078f && candiConf > tmpConf && dist < bestDist)
@@ -254,16 +247,19 @@ void main(void)
 			// merge the point with the vertex already in the global map 
 			bool bAveraged = false;
 			// if the radius of the input vertex is less than 1.5x of the global vertex radius, then it should be merged
-			if (rad <= (1.0f + 0.5f) * elems[idxSelect].data.y)
+			if (rad <= (1.0f + 0.5f) * elems.data[idxSelect].data.y)
 			{
-				elems[idxSelect].vert = vec4(calcWeightedAvg(elems[idxSelect].vert.xyz, mat4x3(T) * vec4(inputVert, 1.0f), elems[idxSelect].data.x, alpha), 1.0f);
-				elems[idxSelect].norm.xyz = normalize(calcWeightedAvg(elems[idxSelect].norm.xyz, mat3(T) * inputNorm, elems[idxSelect].data.x, alpha));
-				elems[idxSelect].color = vec4(calcWeightedAvg(elems[idxSelect].color.rgb, inputColor, elems[idxSelect].data.x, alpha), 1.0f);
+				elems.data[idxSelect].vert = vec4(calcWeightedAvg(elems.data[idxSelect].vert.xyz, mat4x3(T) * vec4(inputVert, 1.0f), elems.data[idxSelect].data.x, alpha), 1.0f);
+				elems.data[idxSelect].norm.xyz = normalize(calcWeightedAvg(elems.data[idxSelect].norm.xyz, mat3(T) * inputNorm, elems.data[idxSelect].data.x, alpha));
+				elems.data[idxSelect].color = vec4(calcWeightedAvg(elems.data[idxSelect].color.rgb, inputColor, elems.data[idxSelect].data.x, alpha), 1.0f);
 				bAveraged = true;
 			}
-			elems[idxSelect].data.x += alpha;									// confidence
-			if (rad < elems[idxSelect].data.y) elems[idxSelect].data.y = rad;	// radius
-			elems[idxSelect].data.z = float(timestamp);								// timestamp
+			elems.data[idxSelect].data.x += alpha;									// confidence
+			if (rad < elems.data[idxSelect].data.y) 
+			{
+				elems.data[idxSelect].data.y = rad;	// radius
+			}
+			elems.data[idxSelect].data.z = float(timestamp);								// timestamp
 
 			// -----
 			// ----- REMOVING POINTS
@@ -273,7 +269,7 @@ void main(void)
 			//     --> in "removePoints.comp"
 
 			// if merging has occured, and the global vertex's onfidence is greater than the threshold
-			if (elems[idxSelect].data.x >= c_stable)
+			if (elems.data[idxSelect].data.x >= c_stable)
 			{
 
 
@@ -281,10 +277,10 @@ void main(void)
 				
 				// 4.3 Removing points: Condition #2
 				// values here in depth space
-				vec4 mergedDepthVec = invT * vec4(elems[idxSelect].vert.xyz, 1.0f);
+				vec4 mergedDepthVec = invT * vec4(elems.data[idxSelect].vert.xyz, 1.0f);
 				float mergedDepth = mergedDepthVec.z;
 
-				float mergedNormZ = (mat3(invT) * elems[idxSelect].norm.xyz).z;
+				float mergedNormZ = (mat3(invT) * elems.data[idxSelect].norm.xyz).z;
 
 
 				for (int i = 0; i < 16; ++i)
@@ -314,7 +310,7 @@ void main(void)
 				//for (int i = 0; i < 16; ++i)
 				//{
 				//	if (idxCandi[i] >= 0 && idxCandi[i] != idxSelect && 
-				//		elems[idxCandi[i]].data.z - elems[idxCandi[i]].data.w > 20)
+				//		elems.data[idxCandi[i]].data.z - elems.data[idxCandi[i]].data.w > 20)
 				//	{
 				//		removePoint(idxCandi[i]);
 				//	}
@@ -331,13 +327,13 @@ void main(void)
 		else if (atomicCounter(g_idx) < maxMapSize) // New points
 		{
 			uint idx = atomicCounterIncrement(g_idx);
-			elems[idx].vert = T * vec4(inputVert, 1.0f);
-			elems[idx].norm = vec4(mat3(T) * inputNorm, 0.0f);
-			elems[idx].color = vec4(inputColor, 1.0f);
-			elems[idx].data.x = alpha;		// confidence
-			elems[idx].data.y = rad;		// radius
-			elems[idx].data.z = float(timestamp);	// timestamp
-			elems[idx].data.w = float(timestamp);	// timestamp
+			elems.data[idx].vert = T * vec4(inputVert, 1.0f);
+			elems.data[idx].norm = vec4(mat3(T) * inputNorm, 0.0f);
+			elems.data[idx].color = vec4(inputColor, 1.0f);
+			elems.data[idx].data.x = alpha;		// confidence
+			elems.data[idx].data.y = rad;		// radius
+			elems.data[idx].data.z = float(timestamp);	// timestamp
+			elems.data[idx].data.w = float(timestamp);	// timestamp
 
 		}
 	}
@@ -351,8 +347,9 @@ void main(void)
 
 
 const removeUnnecessaryPointsSource = `#version 310 es
+layout(local_size_x = 400, local_size_y = 1) in;
 
-layout(binding = 1, offset = 0) uniform atomic_uint g_idxDst;
+layout(binding = 0, offset = 0) uniform atomic_uint g_idxDst;
 
 // Data structure
 struct gMapData
@@ -362,29 +359,30 @@ struct gMapData
 	vec4 norm;	// Normal
 	vec4 color;	// Color
 };
+
 // Global map (source)
 layout(std430, binding = 0) buffer gMapSrc
 {
-	gMapData elemSrc[];
-};
-// Global map (distination; removed)
+	gMapData data[];
+} elemSrc;
+
+// Global map (destination; removed)
 layout(std430, binding = 1) buffer gMapDst
 {
-	gMapData elemDst[];
-};
+	gMapData data[];
+} elemDst;
 
-layout(local_size_x = 400, local_size_y = 1) in;
 
 uniform float c_stable;
 uniform int timestamp;
 
 bool validPoint(uint idx)
 {
-	if (elemSrc[idx].data.y > 0.0)
+	if (elemSrc.data[idx].data.y > 0.0f)
 	{
 		// 4.3 Removing points: Condition #1
-		if (elemSrc[idx].data.x < c_stable
-			&& float(timestamp) - elemSrc[idx].data.z > 30.0f)
+		if (elemSrc.data[idx].data.x < c_stable
+			&& float(timestamp) - elemSrc.data[idx].data.z > 30.0f)
 		{
 			return false;
 		}
@@ -400,10 +398,10 @@ bool validPoint(uint idx)
 }
 void setPoint(uint idxSrc, uint idxDst)
 {
-	elemDst[idxDst].data = elemSrc[idxSrc].data;
-	elemDst[idxDst].vert = elemSrc[idxSrc].vert;
-	elemDst[idxDst].norm = elemSrc[idxSrc].norm;
-	elemDst[idxDst].color = elemSrc[idxSrc].color;
+	elemDst.data[idxDst].data = elemSrc.data[idxSrc].data;
+	elemDst.data[idxDst].vert = elemSrc.data[idxSrc].vert;
+	elemDst.data[idxDst].norm = elemSrc.data[idxSrc].norm;
+	elemDst.data[idxDst].color = elemSrc.data[idxSrc].color;
 }
 
 void main(void)

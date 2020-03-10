@@ -20,6 +20,30 @@
 
 function render(gl, width, height) {
 
+
+  // gl.useProgram(tfTestProg);
+  // gl.viewport(0,0,width,240)
+
+  // var queryTest = gl.createQuery();
+  // gl.beginQuery(gl.TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, queryTest)
+  // gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, gl.transformFeedback);
+  // gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, gl.bufferTF);
+  // gl.beginTransformFeedback(gl.POINTS);
+  // gl.drawArrays(gl.POINTS, 0, 32);
+
+  // gl.endTransformFeedback();
+
+  // gl.endQuery(gl.TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
+
+  // var counter = gl.getQueryParameter(queryTest, gl.QUERY_RESULT);
+
+  // console.log(counter);
+
+  // let bufferOut = new Float32Array(32);
+  //     gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, gl.bufferTF);
+  //   gl.getBufferSubData(gl.TRANSFORM_FEEDBACK_BUFFER, 0, bufferOut);
+  //   gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, null);
+
     gl.viewport(0, 0, width, 240);
 
     gl.useProgram(plottingRenderProgram);
@@ -57,7 +81,7 @@ function render(gl, width, height) {
     gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
     gl.uniform1i(gl.getUniformLocation(renderProgram, "colorMap"), 1);
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+    gl.bindTexture(gl.TEXTURE_2D, gl.colorAligned_texture);
     gl.uniform1i(gl.getUniformLocation(renderProgram, "refNormalMap"), 2);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, gl.refNormal_texture);
@@ -90,9 +114,9 @@ function render(gl, width, height) {
     gl.viewport(width / 2.0, 240, width / 2.0, height - 240);
 
     renderOpts = 0 << 0 | 
-                       0 << 1 |
+                       1 << 1 |
                        0 << 2 |
-                       1 << 3 |
+                       0 << 3 |
                        0 << 4 |
                        0 << 5;
 
@@ -104,7 +128,7 @@ function render(gl, width, height) {
     gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
     gl.uniform1i(gl.getUniformLocation(renderProgram, "colorMap"), 1);
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+    gl.bindTexture(gl.TEXTURE_2D, gl.virtualColorFrame_texture);
     gl.uniform1i(gl.getUniformLocation(renderProgram, "refNormalMap"), 2);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, gl.refNormal_texture);

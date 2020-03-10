@@ -10,13 +10,13 @@ struct gMapData
 // Distance global map
 layout(std430, binding = 0) buffer gMap
 {
-	gMapData elems[];
-};
+	gMapData data[];
+} elems;
+
 uniform mat4 invT;
-uniform mat4 P;
 
 uniform vec2 imSize;
-uniform vec4 cam;
+uniform vec4 cam; // cx, cy, fx, fy
 uniform float maxDepth;
 
 flat out int idx;
@@ -44,7 +44,7 @@ void main()
 {
 	idx = gl_VertexID;
 
-	vec4 tempPos = transPtForGL(elems[idx].vert);
+	vec4 tempPos = transPtForGL(elems.data[idx].vert);
 
 	if (tempPos.z < 0.0f)
 	{
@@ -53,12 +53,7 @@ void main()
 	else
 	{
 		gl_Position = tempPos;
-	}
-
-	// gl_Position = vec4(elems[idx].vert.x, elems[idx].vert.y, 0, 1);
-	gl_PointSize = 10.0f;
-
-	
+	}	
 }
    `;
    

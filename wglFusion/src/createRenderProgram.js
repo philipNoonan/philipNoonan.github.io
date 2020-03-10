@@ -6,7 +6,7 @@
  * @returns WebGLProgram A WebGL shader program object.
  */
 //
-self.createRenderProgram = function (gl, vertexShaderCode, fragmentShaderCode) {
+self.createRenderProgram = function (gl, vertexShaderCode, fragmentShaderCode, transformFeedbackVaryings) {
     // Create the 2 required shaders
     var vertexShader = self.createAndCompileShader(gl, gl.VERTEX_SHADER, vertexShaderCode);
     var fragmentShader = self.createAndCompileShader(gl, gl.FRAGMENT_SHADER, fragmentShaderCode);
@@ -24,6 +24,14 @@ self.createRenderProgram = function (gl, vertexShaderCode, fragmentShaderCode) {
     // Attach the shader objects
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
+
+    if (transformFeedbackVaryings != null) {
+      gl.transformFeedbackVaryings(
+        program,
+        transformFeedbackVaryings,
+        gl.INTERLEAVED_ATTRIBS
+      );
+    }
   
     // Link the WebGLProgram object
     gl.linkProgram(program);

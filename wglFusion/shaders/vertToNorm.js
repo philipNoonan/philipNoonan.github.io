@@ -12,7 +12,7 @@
     vec4 vert3 = imageLoad(vertexImage, u + ivec2(0, 1));
     vec4 vert4 = imageLoad(vertexImage, u);
 
-    if (vert0.w > 0.0 && vert1.w > 0.0 && vert2.w > 0.0  && vert3.w > 0.0 && vert4.w > 0.0)
+    if (vert0.w > 0.0f && vert1.w > 0.0f && vert2.w > 0.0f  && vert3.w > 0.0f && vert4.w > 0.0f)
     {
       vec3 vecX = normalize(vert1.xyz - vert0.xyz);
       vec3 vecY = normalize(vert3.xyz - vert2.xyz);
